@@ -1,5 +1,6 @@
 // --- ADMIN FUNCTIONS ---
 
+// ตรวจสอบสิทธิ์ Admin (Client-side check)
 function checkAdminAccess() {
     const user = getCurrentUser();
     if (!user || user.role !== 'admin') {
@@ -8,6 +9,8 @@ function checkAdminAccess() {
     }
     return true;
 }
+
+// --- FETCH DATA ---
 
 async function fetchAllRequestsForCommand() {
     try {
@@ -36,7 +39,160 @@ async function fetchAllUsers() {
     } catch (error) { showAlert('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลผู้ใช้ได้'); }
 }
 
-// ... (openAdminGenerateCommand, addAdminAttendeeField, handleAdminGenerateCommand - Logic เดิม) ...
+// --- GENERATE COMMAND FUNCTIONS ---
+
+async function openAdminGenerateCommand(requestId) {
+    try {
+        if (!checkAdminAccess()) return;
+        
+        // Reset UI
+        document.getElementById('admin-command-result').classList.add('hidden');
+        document.getElementById('admin-command-form').classList.remove('hidden');
+        document.getElementById('admin-command-attendees-list').innerHTML = '';
+        
+        // Load Data
+        const result = await apiCall('GET', 'getDraftRequest', { requestId: requestId });
+        
+        if (result.status === 'success' && result.data) {
+            let data = result.data;
+            if (result.data.data) data = result.data.data; // Handle wrapper
+
+            // Populate Form
+            document.getElementById('admin-command-request-id').value = requestId;
+            document.getElementById('admin-command-request-id-display').value = requestId;
+            
+            const toInputDate = (dateStr) => { 
+                if(!dateStr) return ''; 
+                const d = new Date(dateStr); 
+                return !isNaN(d) ? d.toISOString().split('T')[0] : ''; 
+            };
+            
+            document.getElementById('admin-command-doc-date').value = toInputDate(data.docDate);
+            document.getElementById('admin-command-requester-name').value = data.requesterName || '';
+            document.getElementById('admin-command-requester-position').value = data.requesterPosition || '';
+            document.getElementById('admin-command-location').value = data.location || '';
+            document.getElementById('admin-command-purpose').value = data.purpose || '';
+            document.getElementById('admin-command-start-date').value = toInputDate(data.startDate);
+            document.getElementById('admin-command-end-date').value = toInputDate(data.endDate);
+            
+            // Populate Attendees
+            if (data.attendees && Array.isArray(data.attendees)) { 
+                data.attendees.forEach(att => addAdminAttendeeField(att.name, att.position)); 
+            } else if (typeof data.attendees === 'string') {
+                try {
+                    JSON.parse(data.attendees).forEach(att => addAdminAttendeeField(att.name, att.position));
+                } catch(e) {}
+            }
+            
+            // Hidden Fields & Info
+            document.getElementById('admin-expense-option').value = data.expenseOption || 'no';
+            document.getElementById('admin-expense-items').value = typeof data.expenseItems === 'object' ? JSON.stringify(data.expenseItems) : (data.expenseItems || '[]');
+            document.getElementById('admin-total-expense').value = data.totalExpense || 0;
+            document.getElementById('admin-vehicle-option').value = data.vehicleOption || 'gov';
+            document.getElementById('admin-license-plate').value = data.licensePlate || '';
+            
+            const vehicleText = data.vehicleOption === 'gov' ? 'รถราชการ' : 
+                              data.vehicleOption === 'private' ? ('รถส่วนตัว ' + (data.licensePlate||'')) : 'อื่นๆ';
+            document.getElementById('admin-command-vehicle-info').textContent = `พาหนะ: ${vehicleText}`;
+            
+            // Switch View
+            await switchPage('admin-generate-command-page');
+            
+            // Setup Add Button Logic
+            const addBtn = document.getElementById('admin-add-attendee-btn');
+            // Clone to remove old listeners
+            const newBtn = addBtn.cloneNode(true); 
+            addBtn.parentNode.replaceChild(newBtn, addBtn);
+            newBtn.addEventListener('click', () => addAdminAttendeeField());
+            
+        } else { 
+            showAlert('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลคำขอได้'); 
+        }
+    } catch (error) { 
+        console.error(error);
+        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + error.message); 
+    }
+}
+
+function addAdminAttendeeField(name = '', position = '') {
+    const list = document.getElementById('admin-command-attendees-list');
+    if (!list) return;
+    
+    const div = document.createElement('div');
+    div.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 mb-2 items-center bg-gray-50 p-2 rounded border border-gray-200';
+    div.innerHTML = `
+        <input type="text" class="form-input admin-att-name w-full" placeholder="ชื่อ-นามสกุล" value="${escapeHtml(name)}">
+        <div class="flex gap-2">
+            <input type="text" class="form-input admin-att-pos w-full" placeholder="ตำแหน่ง" value="${escapeHtml(position)}">
+            <button type="button" class="btn btn-danger btn-sm px-3 font-bold hover:bg-red-700 transition" onclick="this.closest('.grid').remove()" title="ลบรายชื่อนี้">×</button>
+        </div>
+    `;
+    list.appendChild(div);
+}
+
+async function handleAdminGenerateCommand() {
+    const requestId = document.getElementById('admin-command-request-id').value;
+    const commandType = document.querySelector('input[name="admin-command-type"]:checked')?.value;
+    
+    if (!commandType) { 
+        showAlert('ผิดพลาด', 'กรุณาเลือกรูปแบบคำสั่ง'); 
+        return; 
+    }
+    
+    const attendees = [];
+    document.querySelectorAll('#admin-command-attendees-list > div').forEach(div => {
+        const name = div.querySelector('.admin-att-name').value.trim();
+        const pos = div.querySelector('.admin-att-pos').value.trim();
+        if (name) attendees.push({ name, position: pos });
+    });
+    
+    const updatedData = {
+        requestId: requestId, 
+        templateType: commandType, 
+        docDate: document.getElementById('admin-command-doc-date').value,
+        requesterName: document.getElementById('admin-command-requester-name').value.trim(), 
+        requesterPosition: document.getElementById('admin-command-requester-position').value.trim(),
+        location: document.getElementById('admin-command-location').value.trim(), 
+        purpose: document.getElementById('admin-command-purpose').value.trim(),
+        startDate: document.getElementById('admin-command-start-date').value, 
+        endDate: document.getElementById('admin-command-end-date').value,
+        attendees: attendees, 
+        expenseOption: document.getElementById('admin-expense-option').value,
+        expenseItems: document.getElementById('admin-expense-items').value, 
+        totalExpense: document.getElementById('admin-total-expense').value,
+        vehicleOption: document.getElementById('admin-vehicle-option').value, 
+        licensePlate: document.getElementById('admin-license-plate').value
+    };
+    
+    toggleLoader('admin-generate-command-button', true);
+    
+    try {
+        const result = await apiCall('POST', 'approveCommand', updatedData);
+        
+        if (result.status === 'success') {
+            document.getElementById('admin-command-result-title').textContent = 'บันทึกและสร้างคำสั่งสำเร็จ!';
+            document.getElementById('admin-command-result-message').textContent = `ข้อมูลถูกอัปเดตและสร้างคำสั่งแล้ว`;
+            
+            if (result.data.pdfUrl) { 
+                document.getElementById('admin-command-result-link').href = result.data.pdfUrl; 
+                document.getElementById('admin-command-result-link').classList.remove('hidden'); 
+            }
+            
+            document.getElementById('admin-command-form').classList.add('hidden'); 
+            document.getElementById('admin-command-result').classList.remove('hidden');
+            
+            clearRequestsCache(); 
+        } else { 
+            showAlert("ผิดพลาด", result.message || "ไม่สามารถสร้างคำสั่งได้"); 
+        }
+    } catch (error) { 
+        showAlert("เกิดข้อผิดพลาด", "ไม่สามารถสร้างคำสั่งได้: " + error.message); 
+    } finally { 
+        toggleLoader('admin-generate-command-button', false); 
+    }
+}
+
+// --- RENDER FUNCTIONS ---
 
 function renderUsersList(users) {
     const container = document.getElementById('users-content');
@@ -45,7 +201,7 @@ function renderUsersList(users) {
         return; 
     }
     
-    // Responsive Table Structure with data-labels and Sanitization
+    // Responsive Table
     container.innerHTML = `
     <div class="overflow-x-auto">
         <table class="min-w-full bg-white responsive-table">
@@ -75,8 +231,6 @@ function renderUsersList(users) {
         </table>
     </div>`;
 }
-
-// ... (deleteUser, openAddUserModal, downloadUserTemplate, handleUserImport - Logic เดิม) ...
 
 function renderAdminRequestsList(requests) {
     const container = document.getElementById('admin-requests-list');
@@ -156,4 +310,185 @@ function renderAdminMemosList(memos) {
     }).join('');
 }
 
-// ... (openCommandApproval, openDispatchModal, openAdminMemoAction, handleCommandApproval, handleDispatchFormSubmit, handleAdminMemoActionSubmit, sendCompletionEmail - Logic เดิม) ...
+// --- USER MANAGEMENT ---
+
+async function deleteUser(username) {
+    if (await showConfirm("ยืนยันการลบ", `คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้ ${username}?`)) {
+        try { 
+            await apiCall('POST', 'deleteUser', { username }); 
+            showAlert('สำเร็จ', 'ลบผู้ใช้สำเร็จ'); 
+            await fetchAllUsers(); 
+        } catch (error) { 
+            showAlert('ผิดพลาด', error.message); 
+        }
+    }
+}
+
+function openAddUserModal() { 
+    document.getElementById('register-modal').style.display = 'flex'; 
+}
+
+function downloadUserTemplate() {
+    const ws = XLSX.utils.aoa_to_sheet([['Username', 'Password', 'FullName', 'Position', 'Department', 'Role']]);
+    const wb = XLSX.utils.book_new(); 
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'user_template.xlsx');
+}
+
+async function handleUserImport(e) {
+    const file = e.target.files[0]; 
+    if (!file) return;
+    try {
+        const data = await file.arrayBuffer(); 
+        const workbook = XLSX.read(data); 
+        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        
+        const result = await apiCall('POST', 'importUsers', { users: jsonData });
+        if (result.status === 'success') { 
+            showAlert('สำเร็จ', result.message); 
+            await fetchAllUsers(); 
+        } else { 
+            showAlert('ผิดพลาด', result.message); 
+        }
+    } catch (error) { 
+        showAlert('ผิดพลาด', error.message); 
+    } finally { 
+        e.target.value = ''; 
+    }
+}
+
+// --- OTHER MODALS ---
+
+function openCommandApproval(requestId) {
+    if (!checkAdminAccess()) return;
+    document.getElementById('command-request-id').value = requestId;
+    document.getElementById('command-approval-modal').style.display = 'flex';
+}
+
+function openDispatchModal(requestId) {
+    if (!checkAdminAccess()) return;
+    document.getElementById('dispatch-request-id').value = requestId;
+    document.getElementById('dispatch-year').value = new Date().getFullYear() + 543;
+    document.getElementById('dispatch-modal').style.display = 'flex';
+}
+
+function openAdminMemoAction(memoId) {
+    if (!checkAdminAccess()) return;
+    document.getElementById('admin-memo-id').value = memoId;
+    document.getElementById('admin-memo-action-modal').style.display = 'flex';
+}
+
+async function handleCommandApproval(e) {
+    e.preventDefault();
+    const requestId = document.getElementById('command-request-id').value;
+    const commandType = document.querySelector('input[name="command_type"]:checked')?.value;
+    
+    if (!commandType) { showAlert('ผิดพลาด', 'กรุณาเลือกรูปแบบคำสั่ง'); return; }
+    
+    toggleLoader('command-approval-submit-button', true);
+    try {
+        const result = await apiCall('POST', 'approveCommand', { requestId: requestId, templateType: commandType });
+        if (result.status === 'success') { 
+            showAlert('สำเร็จ', 'อนุมัติคำสั่งเรียบร้อยแล้ว'); 
+            document.getElementById('command-approval-modal').style.display = 'none'; 
+            document.getElementById('command-approval-form').reset(); 
+            await fetchAllRequestsForCommand(); 
+        } else { 
+            showAlert('ผิดพลาด', result.message); 
+        }
+    } catch (error) { 
+        showAlert('ผิดพลาด', error.message); 
+    } finally { 
+        toggleLoader('command-approval-submit-button', false); 
+    }
+}
+
+async function handleDispatchFormSubmit(e) {
+    e.preventDefault();
+    const requestId = document.getElementById('dispatch-request-id').value;
+    const dispatchMonth = document.getElementById('dispatch-month').value;
+    const dispatchYear = document.getElementById('dispatch-year').value;
+    const commandCount = document.getElementById('command-count').value;
+    const memoCount = document.getElementById('memo-count').value;
+    
+    if (!dispatchMonth || !dispatchYear || !commandCount || !memoCount) { 
+        showAlert('ผิดพลาด', 'กรุณากรอกข้อมูลให้ครบถ้วน'); 
+        return; 
+    }
+    
+    toggleLoader('dispatch-submit-button', true);
+    try {
+        const result = await apiCall('POST', 'generateDispatchBook', { 
+            requestId: requestId, 
+            dispatchMonth: dispatchMonth, 
+            dispatchYear: dispatchYear, 
+            commandCount: commandCount, 
+            memoCount: memoCount 
+        });
+        if (result.status === 'success') { 
+            showAlert('สำเร็จ', 'สร้างหนังสือส่งสำเร็จ'); 
+            document.getElementById('dispatch-modal').style.display = 'none'; 
+            document.getElementById('dispatch-form').reset(); 
+            await fetchAllRequestsForCommand(); 
+        } else { 
+            showAlert('ผิดพลาด', result.message); 
+        }
+    } catch (error) { 
+        showAlert('ผิดพลาด', error.message); 
+    } finally { 
+        toggleLoader('dispatch-submit-button', false); 
+    }
+}
+
+async function handleAdminMemoActionSubmit(e) {
+    e.preventDefault();
+    const memoId = document.getElementById('admin-memo-id').value;
+    const status = document.getElementById('admin-memo-status').value;
+    const completedMemoFile = document.getElementById('admin-completed-memo-file').files[0];
+    const completedCommandFile = document.getElementById('admin-completed-command-file').files[0];
+    const dispatchBookFile = document.getElementById('admin-dispatch-book-file').files[0];
+    
+    let completedMemoFileObject = null; 
+    let completedCommandFileObject = null; 
+    let dispatchBookFileObject = null;
+    
+    if (completedMemoFile) completedMemoFileObject = await fileToObject(completedMemoFile);
+    if (completedCommandFile) completedCommandFileObject = await fileToObject(completedCommandFile);
+    if (dispatchBookFile) dispatchBookFileObject = await fileToObject(dispatchBookFile);
+    
+    toggleLoader('admin-memo-submit-button', true);
+    try {
+        const result = await apiCall('POST', 'updateMemoStatus', { 
+            id: memoId, 
+            status: status, 
+            completedMemoFile: completedMemoFileObject, 
+            completedCommandFile: completedCommandFileObject, 
+            dispatchBookFile: dispatchBookFileObject 
+        });
+        
+        if (result.status === 'success') {
+            if (status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน') { 
+                const memo = allMemosCache.find(m => m.id === memoId); 
+                if (memo && memo.submittedBy) { 
+                    await sendCompletionEmail(memo.refNumber, memo.submittedBy, status); 
+                } 
+            }
+            showAlert('สำเร็จ', 'อัปเดตสถานะและไฟล์เรียบร้อยแล้ว'); 
+            document.getElementById('admin-memo-action-modal').style.display = 'none'; 
+            document.getElementById('admin-memo-action-form').reset(); 
+            await fetchAllMemos();
+        } else { 
+            showAlert('ผิดพลาด', result.message); 
+        }
+    } catch (error) { 
+        showAlert('ผิดพลาด', error.message); 
+    } finally { 
+        toggleLoader('admin-memo-submit-button', false); 
+    }
+}
+
+async function sendCompletionEmail(requestId, username, status) {
+    try { 
+        await apiCall('POST', 'sendCompletionEmail', { requestId: requestId, username: username, status: status }); 
+    } catch (error) {}
+}
