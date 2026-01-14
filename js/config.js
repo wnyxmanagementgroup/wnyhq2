@@ -1,6 +1,6 @@
-// --- CONFIGURATION ---
+// --- CONFIGURATION & UTILITIES ---
 
-// 1. Debug Mode: เปลี่ยนเป็น false เมื่อใช้งานจริง (Production)
+// 1. Debug Mode: เปลี่ยนเป็น false เมื่อใช้งานจริง (Production) เพื่อปิด Console Log ทั้งหมด
 const IS_DEBUG = true; 
 
 if (!IS_DEBUG) {
@@ -10,6 +10,7 @@ if (!IS_DEBUG) {
     console.info = function() {};
 }
 
+// URL ของ Google Apps Script Web App
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzP-HCQGbA3Xi2Ms4DXTGy8k17Bv72pFohnJ0txAePjjXybe6pK42mSaYOfTQ5V9Q6mDA/exec";
 
 // Global State
@@ -21,11 +22,11 @@ window.requestsChartInstance = null;
 window.statusChartInstance = null;
 let currentPublicWeeklyData = [];
 
-// --- UTILITY: SECURITY SANITIZATION ---
-// ฟังก์ชันป้องกัน XSS: แปลงอักขระพิเศษเป็น HTML entities ก่อนแสดงผล
-// ใช้ฟังก์ชันนี้ครอบตัวแปร text ที่มาจาก User input เสมอ
+// --- SECURITY UTILITY: SANITIZATION ---
+// ฟังก์ชันป้องกัน XSS: แปลงอักขระพิเศษเป็น HTML entities
+// ใช้ฟังก์ชันนี้ครอบตัวแปร text ที่มาจาก User input หรือ Database เสมอ ก่อนนำไปแสดงผล
 function escapeHtml(text) {
-    if (!text) return '';
+    if (text === null || text === undefined) return '';
     return String(text)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -34,8 +35,9 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-// Map ตำแหน่งพิเศษ (คงเดิม)
-'รองผู้อำนวยการกลุ่มบริหารทั่วไป':'นางวชิรินทรา พัฒนกุลเดช',
+// Map ตำแหน่งพิเศษสำหรับหัวหน้างาน
+let specialPositionMap = {
+    'รองผู้อำนวยการกลุ่มบริหารทั่วไป':'นางวชิรินทรา พัฒนกุลเดช',
     'รองผู้อำนวยการกลุ่มบริหารงานบุคคล':'นางปณิชา ภัสสิรากุล',
     'รองผู้อำนวยการกลุ่มบริหารงบประมาณ':'นางจันทิมา นกอยู่',
     'รองผู้อำนวยการกลุ่มบริหารวิชาการ': 'นายมงคล เกตมณี',
