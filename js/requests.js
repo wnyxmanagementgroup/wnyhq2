@@ -327,84 +327,75 @@ async function fetchUserRequests(forceRefresh = false) {
     if (noMsg) noMsg.classList.add('hidden');
 
     try {
-        let requests = [];
-        let usedFirestore = false;
+        const yearAD = selectedYear - 543;
 
-        // ── 1. Firestore ก่อน (เร็ว, real-time) ──
-        if (typeof db !== 'undefined') {
-            try {
-                const snapshot = await db.collection('requests')
-                    .where('username', '==', user.username)
-                    .get();
+        // ── ดึง Firestore + GAS พร้อมกัน (parallel) ──
+        const [fsResult, gasResult] = await Promise.allSettled([
+            (typeof db !== 'undefined')
+                ? db.collection('requests').where('username', '==', user.username).get()
+                : Promise.reject(new Error('Firestore not available')),
+            apiCall('GET', 'getRequestsByYear', { year: selectedYear, username: user.username })
+        ]);
 
-                if (!snapshot.empty) {
-                    const yearAD = selectedYear - 543;
-                    requests = snapshot.docs
-                        .map(doc => {
-                            const d = doc.data();
-                            // แปลง Firestore Timestamp
-                            if (d.timestamp && d.timestamp.toDate) d.timestamp = d.timestamp.toDate().toISOString();
-                            if (d.lastUpdated && d.lastUpdated.toDate) d.lastUpdated = d.lastUpdated.toDate().toISOString();
-                            return { ...d, _source: 'firestore' };
-                        })
-                        .filter(req => {
-                            if (req.isDeleted) return false; // ซ่อนรายการที่ถูกลบ
-                            // กรองตามปี
-                            if (!req.docDate) return true;
-                            const reqYear = new Date(req.docDate).getFullYear();
-                            return reqYear === yearAD;
-                        });
-                    usedFirestore = requests.length > 0;
-                    console.log(`⚡ Loaded ${requests.length} requests from Firestore`);
-                }
-            } catch (fbErr) {
-                console.warn('⚠️ Firestore fetch failed, falling back to GAS:', fbErr.message);
-            }
-        }
-
-        // ── 2. GAS Sheets fallback (ถ้า Firestore ไม่มีข้อมูลหรือล้มเหลว) ──
-        if (!usedFirestore) {
-            console.log('📡 Loading from GAS Sheets (fallback)...');
-            const result = await apiCall('GET', 'getRequestsByYear', {
-                year: selectedYear,
-                username: user.username
+        // ── ประมวลผล GAS (เป็น base — มีข้อมูลครบ) ──
+        const gasMap = {};
+        if (gasResult.status === 'fulfilled' && gasResult.value.status === 'success') {
+            (gasResult.value.data || []).forEach(req => {
+                if (!req.id) return;
+                let attendees = req.attendees || [];
+                try { if (typeof attendees === 'string') attendees = JSON.parse(attendees); } catch(e) { attendees = []; }
+                gasMap[req.id] = { ...req, attendees, _source: 'gas' };
             });
-            const gasRequests = (result.status === 'success') ? result.data || [] : [];
-
-            // Merge ข้อมูล GAS + Firestore (Firestore ทับ GAS สำหรับฟิลด์ที่อัปเดตแล้ว)
-            if (typeof db !== 'undefined' && gasRequests.length > 0) {
-                try {
-                    const fbSnap = await db.collection('requests').where('username', '==', user.username).get();
-                    const fbMap = {};
-                    fbSnap.forEach(doc => { fbMap[doc.id] = doc.data(); });
-
-                    requests = gasRequests.map(req => {
-                        const safeId = req.id ? req.id.replace(/[\/\\:\.]/g, '-') : '';
-                        const fbDoc = safeId ? fbMap[safeId] : null;
-                        if (!fbDoc) return req;
-                        return {
-                            ...req,
-                            fileUrl:          fbDoc.fileUrl          || req.fileUrl,
-                            pdfUrl:           fbDoc.pdfUrl           || req.pdfUrl,
-                            memoPdfUrl:       fbDoc.memoPdfUrl       || req.memoPdfUrl,
-                            completedMemoUrl: fbDoc.completedMemoUrl || req.completedMemoUrl,
-                            commandPdfUrl:    fbDoc.commandPdfUrl    || fbDoc.commandBookUrl || req.commandPdfUrl,
-                            dispatchBookUrl:  fbDoc.dispatchBookUrl  || fbDoc.dispatchBookPdfUrl || req.dispatchBookUrl,
-                            status:           fbDoc.status           || req.status,
-                            commandStatus:    fbDoc.commandStatus    || req.commandStatus,
-                            docStatus:        fbDoc.docStatus        || req.docStatus        || '',
-                            rejectionReason:  fbDoc.rejectionReason  || req.rejectionReason  || '',
-                            rejectedBy:       fbDoc.rejectedBy       || req.rejectedBy       || '',
-                            wasRejected:      fbDoc.wasRejected      ?? req.wasRejected      ?? false,
-                        };
-                    });
-                } catch (e) {
-                    requests = gasRequests;
-                }
-            } else {
-                requests = gasRequests;
-            }
+            console.log(`📋 Loaded ${Object.keys(gasMap).length} requests from GAS`);
+        } else {
+            console.warn('⚠️ GAS fetch failed:', gasResult.reason?.message || gasResult.value?.message);
         }
+
+        // ── ประมวลผล Firestore (deduplicate ตาม id ที่สมบูรณ์กว่า) ──
+        const fsMap = {};
+        if (fsResult.status === 'fulfilled' && !fsResult.value.empty) {
+            fsResult.value.docs.forEach(doc => {
+                const d = doc.data();
+                if (!d.id) return;
+                if (d.timestamp && d.timestamp.toDate) d.timestamp = d.timestamp.toDate().toISOString();
+                if (d.lastUpdated && d.lastUpdated.toDate) d.lastUpdated = d.lastUpdated.toDate().toISOString();
+                const existing = fsMap[d.id];
+                if (!existing || (!existing.requesterName && d.requesterName)) fsMap[d.id] = { ...d };
+            });
+            console.log(`⚡ Loaded ${Object.keys(fsMap).length} requests from Firestore`);
+        } else if (fsResult.status === 'rejected') {
+            console.warn('⚠️ Firestore fetch failed:', fsResult.reason?.message);
+        }
+
+        // ── Merge: GAS เป็น base, Firestore fill ค่าล่าสุดที่ไม่ว่าง ──
+        const mergedMap = { ...gasMap };
+        Object.values(fsMap).forEach(fb => {
+            const gas = mergedMap[fb.id] || {};
+            mergedMap[fb.id] = {
+                ...gas,
+                ...Object.fromEntries(Object.entries(fb).filter(([, v]) => v !== null && v !== undefined && v !== '')),
+                pdfUrl:          fb.pdfUrl     || fb.fileUrl    || gas.pdfUrl,
+                fileUrl:         fb.fileUrl    || fb.pdfUrl     || gas.fileUrl,
+                memoPdfUrl:      fb.memoPdfUrl || gas.memoPdfUrl,
+                commandPdfUrl:   fb.commandPdfUrl  || fb.commandBookUrl  || gas.commandPdfUrl,
+                dispatchBookUrl: fb.dispatchBookUrl || fb.dispatchBookPdfUrl || gas.dispatchBookUrl,
+                status:          fb.status     || gas.status,
+                commandStatus:   fb.commandStatus  || gas.commandStatus,
+                docStatus:       fb.docStatus  || gas.docStatus || '',
+                _source: 'firestore',
+            };
+        });
+
+        let requests = Object.values(mergedMap)
+            .filter(r => !r.isDeleted)
+            .filter(r => {
+                const idYear = r.id ? parseInt((r.id.split('/')[1]) || 0) : 0;
+                if (idYear === selectedYear) return true;
+                if (!r.docDate) return false;
+                return new Date(r.docDate).getFullYear() === yearAD;
+            });
+
+        console.log(`✅ User merged total ${requests.length} requests`);
 
         // ── 3. เรียงลำดับ (ใหม่ -> เก่า) ──
         if (requests.length > 0) {
