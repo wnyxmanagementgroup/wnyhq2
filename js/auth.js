@@ -304,6 +304,11 @@ async function handlePasswordUpdate(e) {
         return;
     }
 
+    if (formData.newPassword.length < 6) {
+        showAlert('ผิดพลาด', 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
+        return;
+    }
+
     toggleLoader('password-submit-button', true);
 
     try {
@@ -335,6 +340,11 @@ function handleRegister(e) {
     }
     const password = document.getElementById('reg-password').value;
     const confirmPassword = document.getElementById('reg-confirm-password').value;
+
+    if (password.length < 6) {
+        showAlert('ผิดพลาด', 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
+        return;
+    }
 
     if (password !== confirmPassword) {
         showAlert('ผิดพลาด', 'รหัสผ่านไม่ตรงกัน');

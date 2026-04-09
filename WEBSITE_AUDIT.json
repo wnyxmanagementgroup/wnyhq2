@@ -300,12 +300,13 @@
     {
       "id": "BUG-003",
       "severity": "low",
-      "status": "OPEN",
-      "title": "IS_DEBUG = true in production code",
-      "description": "config.js:4 has IS_DEBUG=true which keeps all console.log/warn/error/info active. In production, this should be false to reduce noise and avoid leaking internal state in browser console.",
-      "impact": "Performance overhead, potential information disclosure via console.",
+      "status": "FIXED",
+      "title": "IS_DEBUG = true hardcoded in production code",
+      "description": "config.js:4 had IS_DEBUG=true which kept all console.log/warn/error/info active everywhere.",
+      "impact": "Performance overhead, potential information disclosure via console in production.",
       "locations": ["js/config.js:4"],
-      "recommendation": "Set IS_DEBUG = false before deploying to production. OR use build step to strip debug logs."
+      "fix": "Changed to auto-detect: IS_DEBUG = true only when hostname is localhost/127.0.0.1/''. Automatically off on production domain.",
+      "fixedIn": ["js/config.js"]
     },
     {
       "id": "BUG-004",
@@ -340,12 +341,13 @@
     {
       "id": "BUG-007",
       "severity": "low",
-      "status": "OPEN",
-      "title": "Password padding for Firebase (adjustPasswordForFirebase)",
-      "description": "auth.js:458 pads passwords shorter than 6 characters with '0's to meet Firebase's minimum. This means password '1234' becomes '123400' in Firebase, creating a security mismatch with the GAS-stored hash.",
-      "impact": "Users with short passwords could potentially bypass Firebase auth by guessing the padding pattern, though GAS is the authoritative auth source.",
-      "locations": ["js/auth.js:458-466"],
-      "recommendation": "Consider enforcing minimum password length of 6 in the registration/password change UI instead of silently padding."
+      "status": "FIXED",
+      "title": "Password padding for Firebase — no UI enforcement of minimum length",
+      "description": "auth.js pads passwords shorter than 6 characters with '0's for Firebase but the UI had no minimum length check, allowing users to create weak passwords without warning.",
+      "impact": "Users with short passwords could create accounts without understanding the padding behavior.",
+      "locations": ["js/auth.js — handleRegister()", "js/auth.js — handlePasswordUpdate()"],
+      "fix": "Added explicit minimum length check (>= 6 characters) in both handleRegister() and handlePasswordUpdate(). Shows clear Thai-language error via showAlert before the Firebase padding logic is reached.",
+      "fixedIn": ["js/auth.js"]
     },
     {
       "id": "BUG-008",
@@ -360,22 +362,41 @@
     {
       "id": "BUG-009",
       "severity": "low",
-      "status": "OPEN",
-      "title": "Approval token links have no notification mechanism",
-      "description": "tokenSign.js creates 7-day approval links, but there is no email/notification reminder when a link is about to expire.",
+      "status": "PARTIALLY FIXED",
+      "title": "Approval token links have no expiry warning",
+      "description": "tokenSign.js creates 7-day approval links, but there was no in-UI warning when the link is about to expire.",
       "impact": "Approvers may miss deadlines; links expire silently.",
-      "locations": ["js/tokenSign.js", "js/admin.js — createApprovalLink()"],
-      "recommendation": "Add email notification via GAS when link is created and optionally a reminder 1 day before expiry."
+      "locations": ["js/tokenSign.js:192-195"],
+      "fix": "Added in-page amber warning banner when token expires in less than 24 hours, showing exact hours remaining. Full email notification still requires GAS-side implementation.",
+      "fixedIn": ["js/tokenSign.js"],
+      "remainingWork": "Server-side email notification via GAS when link is created or near expiry."
     },
     {
       "id": "BUG-010",
       "severity": "low",
-      "status": "OPEN",
-      "title": "Cache TTL may cause stale data in collaborative use",
-      "description": "User request cache TTL is 5 minutes (utils.js:5). If two admins work simultaneously, one may see stale data for up to 5 minutes.",
-      "impact": "Stale data display; not data corruption.",
-      "locations": ["js/utils.js:5"],
-      "recommendation": "Consider using Firestore real-time listeners (onSnapshot) for the admin view instead of polling with cache."
+      "status": "FIXED",
+      "title": "Cache not cleared after admin delete/status-update operations",
+      "description": "deleteRequestByAdmin() and deleteMemoByAdmin() did not clear user-side request cache after deletion. Status update functions did not clear window.userRequestsCache after changing request status.",
+      "impact": "Users could see deleted records or old status values for up to 5 minutes after an admin action.",
+      "locations": [
+        "js/admin.js:2005 — deleteRequestByAdmin()",
+        "js/admin.js:2030 — deleteMemoByAdmin()",
+        "js/admin.js:599-616 — updateRequestStatus()",
+        "js/admin.js:698-703 — inline status update"
+      ],
+      "fix": "Added clearRequestsCache() in delete functions. Added targeted window.userRequestsCache=null in status update functions (without clearing allRequestsCache which admin needs immediately).",
+      "fixedIn": ["js/admin.js"]
+    },
+    {
+      "id": "BUG-011",
+      "severity": "low",
+      "status": "FIXED",
+      "title": "validateRequestForm used bare alert() and showed double-error on form submit",
+      "description": "validateRequestForm() used alert() (not the styled showAlert modal) and showed generic field labels. When called from handleRequestFormSubmit(), a second generic error alert was also shown from the catch block.",
+      "impact": "Inconsistent UI — raw browser alert() instead of styled modal; users saw two error messages on validation failure.",
+      "locations": ["js/requests.js:2526-2547", "js/requests.js:1813"],
+      "fix": "Rewrote validateRequestForm to use showAlert with specific Thai field-level messages per missing field. Changed handleRequestFormSubmit to return early (not throw) after validation failure, preventing double-alert.",
+      "fixedIn": ["js/requests.js"]
     }
   ],
 
@@ -450,12 +471,64 @@
   ],
 
   "openRecommendations": [
-    "Set IS_DEBUG = false before production deployment (config.js:4)",
-    "Verify and harden Firestore Security Rules to enforce role-based access",
-    "Add authentication/authorization check in Google Apps Script doPost() handler",
-    "Enforce minimum password length of 6 in registration UI (remove silent padding)",
+    "Verify and harden Firestore Security Rules to enforce role-based access (BUG-004)",
+    "Add authentication/authorization check in Google Apps Script doPost() handler (BUG-005)",
+    "Ensure all server-side (GAS) actions verify user role independently of client (BUG-006)",
     "Pin Tailwind CSS CDN to a specific version to prevent unexpected breakage",
-    "Add email notification when approval token links are created/about to expire",
-    "Consider Firestore onSnapshot() real-time listeners for admin views to replace cache"
+    "Add server-side email notification via GAS when approval token links are created/near expiry (BUG-009 remaining)",
+    "Consider Firestore onSnapshot() real-time listeners for admin views to replace polling cache"
+  ],
+
+  "fixLog": [
+    {
+      "date": "2026-04-09",
+      "round": 1,
+      "by": "Claude Code Audit — Initial Bug Fixes",
+      "changes": [
+        {
+          "file": "js/requests.js",
+          "description": "BUG-001: Replaced undefined generatePdfFromCloudRun() with generateOfficialPDF({doctype:'memo', btnId:'submit-button'})"
+        },
+        {
+          "file": "js/firebaseService.js",
+          "description": "BUG-001: Replaced both generatePdfFromCloudRun() calls with generateOfficialPDF()"
+        },
+        {
+          "file": "js/admin.js",
+          "description": "BUG-002: Removed unsafe duplicate blobToBase64() (missing null-check on reader.result)"
+        },
+        {
+          "file": "js/firebaseService.js",
+          "description": "BUG-002: Removed redundant duplicate blobToBase64()"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-09",
+      "round": 2,
+      "by": "Claude Code Audit — Full Bug Fix Pass",
+      "changes": [
+        {
+          "file": "js/config.js",
+          "description": "BUG-003: IS_DEBUG now auto-detects localhost vs production hostname instead of hardcoded true"
+        },
+        {
+          "file": "js/auth.js",
+          "description": "BUG-007: Added minimum 6-character password validation in handleRegister() and handlePasswordUpdate() before Firebase padding logic"
+        },
+        {
+          "file": "js/tokenSign.js",
+          "description": "BUG-009: Added amber warning banner in handleTokenSignFlow() when token expires in less than 24 hours"
+        },
+        {
+          "file": "js/admin.js",
+          "description": "BUG-010: Added clearRequestsCache() in deleteRequestByAdmin() and deleteMemoByAdmin(). Added targeted window.userRequestsCache=null in status update functions."
+        },
+        {
+          "file": "js/requests.js",
+          "description": "BUG-011: Rewrote validateRequestForm() to use showAlert with specific Thai field-level messages. Fixed double-alert by returning early in handleRequestFormSubmit instead of throwing."
+        }
+      ]
+    }
   ]
 }

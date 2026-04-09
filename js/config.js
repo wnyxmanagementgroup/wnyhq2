@@ -1,7 +1,11 @@
 // --- CONFIGURATION & UTILITIES ---
 
-// 1. Debug Mode
-const IS_DEBUG = true; 
+// 1. Debug Mode — เปิดอัตโนมัติบน localhost, ปิดบน production
+const IS_DEBUG = (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === ''
+);
 
 if (!IS_DEBUG) {
     console.log = function() {};

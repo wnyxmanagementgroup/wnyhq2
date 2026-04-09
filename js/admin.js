@@ -597,7 +597,10 @@ async function updateMemoStatus(requestId, newStatus) {
         });
 
         if (result.status === 'success') {
-            
+            // ล้าง user-side cache เพื่อให้ User เห็นสถานะใหม่ทันทีเมื่อ reload
+            window.userRequestsCache = null;
+            window.userRequestsCacheTime = 0;
+
             // 2. อัปเดต Firestore (เพื่อให้ User เห็นสถานะเปลี่ยนทันทีแบบ Realtime)
             if (typeof db !== 'undefined') {
                 const safeId = requestId.replace(/[\/\\:\.]/g, '-');
@@ -696,6 +699,8 @@ window.confirmCustomStatus = async function() {
             .catch(err => console.warn('Sheet update warning:', err));
 
         // 3. อัปเดต cache แล้วรีเฟรชตาราง
+        window.userRequestsCache = null;  // ล้าง user-side cache
+        window.userRequestsCacheTime = 0;
         const idx = allRequestsCache.findIndex(r => r.id === docId || r.requestId === docId);
         if (idx !== -1) {
             if (doStatus)    allRequestsCache[idx].status    = newValue;
@@ -2003,6 +2008,7 @@ async function deleteRequestByAdmin(requestId) {
         if (typeof db !== 'undefined') { try { await db.collection('requests').doc(safeId).delete(); } catch (e) {} }
         const result = await apiCall('POST', 'deleteRequest', { id: requestId });
         if (result.status === 'success') {
+            if (typeof clearRequestsCache === 'function') clearRequestsCache();
             showAlert('สำเร็จ', 'ลบข้อมูลเรียบร้อยแล้ว');
             await fetchAllRequestsForCommand();
         } else { throw new Error(result.message); }
@@ -2028,6 +2034,7 @@ async function deleteMemoByAdmin(refId, gasId) {
         // ★ ส่ง GAS API ด้วย gasId (internal) — fallback เป็น refId ถ้าเหมือนกัน
         const result = await apiCall('POST', 'deleteMemo', { id: gasId || refId });
         if (result.status === 'success') {
+            if (typeof clearRequestsCache === 'function') clearRequestsCache();
             showAlert('สำเร็จ', 'ลบข้อมูลเรียบร้อยแล้ว');
             await fetchAllMemos();
         } else { throw new Error(result.message); }

@@ -1810,7 +1810,11 @@ async function handleRequestFormSubmit(e) {
 
     try {
         const formData = getRequestFormData();
-        if (!validateRequestForm(formData)) throw new Error("กรุณากรอกข้อมูลให้ครบถ้วน");
+        if (!validateRequestForm(formData)) {
+            // validateRequestForm แสดง showAlert เฉพาะเจาะจงแล้ว — คืนค่าโดยไม่ throw
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'ส่งบันทึกขอไปราชการ'; }
+            return;
+        }
 
         const user = getCurrentUser();
         if (!user) throw new Error("ไม่พบข้อมูลผู้ใช้งาน (กรุณา Login ใหม่)");
@@ -2525,13 +2529,26 @@ async function mergeAndBackfillPDF(requestId, mainPdfUrl, attachments, user) {
  */
 function validateRequestForm(data) {
     // 1. ตรวจสอบข้อมูลบังคับ (ชื่อ, ตำแหน่ง, วัตถุประสงค์, สถานที่)
-    if (!data.requesterName || !data.requesterPosition || !data.purpose || !data.location) {
-        // แจ้งเตือนผ่าน Console หรือ UI (ใน handleRequestFormSubmit จะจับ error นี้)
+    if (!data.requesterName || !data.requesterPosition) {
+        showAlert('ข้อมูลไม่ครบถ้วน', 'กรุณากรอกชื่อ-นามสกุล และตำแหน่งของผู้ขอ');
+        return false;
+    }
+    if (!data.purpose) {
+        showAlert('ข้อมูลไม่ครบถ้วน', 'กรุณากรอกวัตถุประสงค์/เรื่องที่ขอไปราชการ');
+        return false;
+    }
+    if (!data.location) {
+        showAlert('ข้อมูลไม่ครบถ้วน', 'กรุณากรอกสถานที่ปฏิบัติราชการ');
         return false;
     }
 
     // 2. ตรวจสอบวันที่
-    if (!data.docDate || !data.startDate || !data.endDate) {
+    if (!data.docDate) {
+        showAlert('ข้อมูลไม่ครบถ้วน', 'กรุณาระบุวันที่ของเอกสาร');
+        return false;
+    }
+    if (!data.startDate || !data.endDate) {
+        showAlert('ข้อมูลไม่ครบถ้วน', 'กรุณาระบุวันที่เริ่มต้นและวันที่สิ้นสุดการเดินทาง');
         return false;
     }
 
@@ -2539,7 +2556,7 @@ function validateRequestForm(data) {
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
     if (start > end) {
-        alert('วันที่เริ่มต้นและสิ้นสุดไม่ถูกต้อง (วันกลับต้องอยู่หลังวันเริ่ม)');
+        showAlert('วันที่ไม่ถูกต้อง', 'วันที่เริ่มต้นต้องมาก่อนหรือตรงกับวันที่สิ้นสุดการเดินทาง');
         return false;
     }
 
