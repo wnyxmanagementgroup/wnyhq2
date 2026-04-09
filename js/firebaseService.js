@@ -65,6 +65,19 @@ async function uploadPdfToStorage(pdfBlob, username, filename) {
     if (typeof firebase === 'undefined' || !firebase.storage) {
         throw new Error('Firebase Storage SDK not available');
     }
+
+    // Firebase Storage rules require request.auth != null.
+    // App uses GAS-based auth (not Firebase Auth), so sign in anonymously if needed.
+    if (firebase.auth && !firebase.auth().currentUser) {
+        try {
+            await firebase.auth().signInAnonymously();
+            console.log('🔑 Signed in anonymously for Storage access');
+        } catch (authErr) {
+            console.warn('⚠️ Anonymous sign-in failed:', authErr.message);
+            // Proceed anyway — storage rules may allow unauthenticated writes in dev
+        }
+    }
+
     const storage = firebase.storage();
     const safeUsername = (username || 'unknown').replace(/[^a-zA-Z0-9ก-๙_-]/g, '_');
     const safeFilename = filename || `${safeUsername}_${Date.now()}.pdf`;

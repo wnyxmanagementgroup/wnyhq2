@@ -2367,19 +2367,10 @@ async function saveEditRequest() {
         // --- Step 2: อัปโหลดไฟล์ ---
         setBtnStatus('กำลังอัปโหลดไฟล์...');
         
-        const finalBase64 = await blobToBase64(pdfBlob);
         const safeId = formData.requestId.replace(/[\/\\\:\.\s]/g, '-');
         const filename = `memo_EDIT_${safeId}_${Date.now()}.pdf`;
 
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data: finalBase64,
-            filename: filename,
-            mimeType: 'application/pdf',
-            username: formData.username
-        });
-
-        if (uploadRes.status !== 'success') throw new Error("อัปโหลดไฟล์แก้ไขไม่สำเร็จ");
-        const newFileUrl = uploadRes.url;
+        const newFileUrl = await uploadPdfToStorage(pdfBlob, formData.username, filename);
         console.log("✅ New File URL:", newFileUrl);
 
         // --- Step 3: บันทึกข้อมูล ---
@@ -2483,18 +2474,12 @@ async function mergeAndBackfillPDF(requestId, mainPdfUrl, attachments, user) {
         if (typeof mergePDFs !== 'function') throw new Error("mergePDFs function missing");
         
         const mergedBlob = await mergePDFs(mainBlob, attachmentUrls);
-        
-        // 4. อัปโหลดไฟล์ที่รวมเสร็จแล้ว (Merged PDF)
-        const mergedBase64 = await blobToBase64(mergedBlob);
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data: mergedBase64,
-            filename: `merged_request_${requestId}_${Date.now()}.pdf`,
-            mimeType: 'application/pdf',
-            username: user.username
-        });
 
-        if (uploadRes.status === 'success') {
-            const finalUrl = uploadRes.url;
+        // 4. อัปโหลดไฟล์ที่รวมเสร็จแล้ว (Merged PDF)
+        const mergedFilename = `merged_request_${requestId}_${Date.now()}.pdf`;
+        const finalUrl = await uploadPdfToStorage(mergedBlob, user.username, mergedFilename);
+
+        if (finalUrl) {
             console.log("✅ Merge & Upload Success:", finalUrl);
 
             // 5. อัปเดตลิงก์ในฐานข้อมูล (Update Request)
@@ -2863,14 +2848,9 @@ async function handleMemoSubmitFromModal(e) {
                 const mergedPdfBlob = await mergeFilesToSinglePDF(allFilesToMerge);
 
                 btn.innerHTML = '<span class="loader-sm w-4 h-4"></span> กำลังอัปโหลด...';
-                const mergedBase64 = await blobToBase64(mergedPdfBlob);
-                const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                    data: mergedBase64, filename: `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`,
-                    mimeType: 'application/pdf', username: user.username, requestId: requestId
-                });
-
-                if (uploadRes.status !== 'success') throw new Error("อัปโหลดไม่สำเร็จ");
-                finalFileUrlForAdmin = uploadRes.url;
+                const mergedFilename = `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`;
+                finalFileUrlForAdmin = await uploadPdfToStorage(mergedPdfBlob, user.username, mergedFilename);
+                if (!finalFileUrlForAdmin) throw new Error("อัปโหลดไม่สำเร็จ");
             } else if (preSignedUrl) {
                 // ไม่มีไฟล์แนบและไม่มี pdfBase64 แต่มี URL บันทึก → ใช้ URL โดยตรง
                 finalFileUrlForAdmin = preSignedUrl;
@@ -3129,20 +3109,12 @@ async function finalizeDocumentSubmission(pdfBlob) {
     const isEdit = requesterStamperState.isEdit;
 
     try {
-        // 1. แปลงไฟล์ใหม่เป็น Base64 และอัปโหลดขึ้น Google Drive
-        const base64Data = await blobToBase64(pdfBlob);
+        // 1. อัปโหลดไฟล์ขึ้น Firebase Storage
         const fileName = `memo_${formData.username}_${Date.now()}.pdf`;
+        const uploadedUrl = await uploadPdfToStorage(pdfBlob, formData.username, fileName);
+        if (!uploadedUrl) throw new Error("Upload Failed");
 
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data: base64Data,
-            filename: fileName,
-            mimeType: 'application/pdf',
-            username: formData.username
-        });
-
-        if (uploadRes.status !== 'success') throw new Error("Upload Failed");
-
-        formData.pdfUrl = uploadRes.url; // นำ URL ใหม่ใส่กลับเข้าไป
+        formData.pdfUrl = uploadedUrl; // นำ URL ใหม่ใส่กลับเข้าไป
         
         // 2. จัดการบันทึกฐานข้อมูล
         if (isEdit) {
