@@ -406,14 +406,14 @@ function renderUserRequests(requests) {
                     <span class="ml-auto text-gray-400 text-xs">↗</span>
                 </a>`).join('');
             actionBtns += `
-                <div class="relative w-full file-menu-wrapper">
+                <div class="w-full file-menu-wrapper">
                     <button onclick="toggleFileMenu('${_menuId}', event)"
-                        class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold flex items-center justify-center gap-1 pr-2">
+                        class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold flex items-center justify-center gap-1">
                         <span>📥 นำไฟล์ไปใช้งาน</span>
                         <span class="opacity-70 text-xs">▾</span>
                     </button>
-                    <div id="${_menuId}" class="file-menu-dropdown hidden absolute right-0 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden" style="top:calc(100% + 4px);min-width:190px;">
-                        <div class="bg-green-600 px-3 py-1.5 text-xs text-white font-bold tracking-wide">เลือกเอกสาร</div>
+                    <div id="${_menuId}" class="file-menu-dropdown" style="display:none;">
+                        <div style="background:#16a34a;padding:6px 14px;font-size:0.72rem;color:#fff;font-weight:700;letter-spacing:.05em;">เลือกเอกสาร</div>
                         ${_menuItems}
                     </div>
                 </div>`;
@@ -3176,22 +3176,49 @@ function toggleFileMenu(menuId, event) {
     if (event) event.stopPropagation();
     const menu = document.getElementById(menuId);
     if (!menu) return;
-    const isOpen = !menu.classList.contains('hidden');
+    const isOpen = menu.style.display !== 'none' && menu.style.display !== '';
     closeAllFileMenus();
-    if (!isOpen) menu.classList.remove('hidden');
+    if (!isOpen) {
+        // ใช้ position:fixed เพื่อหนีออกจาก overflow:hidden ของ table-wrapper
+        const btn = event && (event.currentTarget || event.target?.closest('button'));
+        if (btn) {
+            const r = btn.getBoundingClientRect();
+            menu.style.top = (r.bottom + 4) + 'px';
+            menu.style.left = r.left + 'px';
+            menu.style.right = 'auto';
+        }
+        menu.style.display = 'block';
+        // ปรับตำแหน่งถ้า dropdown ล้นขอบขวาจอ
+        requestAnimationFrame(() => {
+            const mr = menu.getBoundingClientRect();
+            if (mr.right > window.innerWidth - 8) {
+                menu.style.left = 'auto';
+                const btn2 = event && (event.currentTarget || event.target?.closest('button'));
+                if (btn2) {
+                    const r2 = btn2.getBoundingClientRect();
+                    menu.style.right = (window.innerWidth - r2.right) + 'px';
+                } else {
+                    menu.style.right = '8px';
+                }
+            }
+        });
+    }
 }
 
-function closeAllFileMenus(event) {
-    if (event) event.stopPropagation();
-    document.querySelectorAll('.file-menu-dropdown').forEach(m => m.classList.add('hidden'));
+function closeAllFileMenus() {
+    document.querySelectorAll('.file-menu-dropdown').forEach(m => { m.style.display = 'none'; });
 }
 
 // ปิด dropdown เมื่อคลิกนอกพื้นที่ (add once)
 if (!window._fileMenuOutsideListenerAdded) {
     window._fileMenuOutsideListenerAdded = true;
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('.file-menu-wrapper')) {
-            document.querySelectorAll('.file-menu-dropdown').forEach(m => m.classList.add('hidden'));
+        if (!e.target.closest('.file-menu-wrapper') && !e.target.closest('.file-menu-dropdown')) {
+            document.querySelectorAll('.file-menu-dropdown').forEach(m => { m.style.display = 'none'; });
         }
     });
+    // ปิดเมื่อ scroll ด้วย เพราะ position:fixed ไม่ขยับตาม
+    document.addEventListener('scroll', function() {
+        document.querySelectorAll('.file-menu-dropdown').forEach(m => { m.style.display = 'none'; });
+    }, true);
 }
