@@ -123,6 +123,7 @@ function initializeUserSession(user) {
     const adminBtnApprovalLinks = document.getElementById('admin-nav-approval-links');
     const adminBtnHeads         = document.getElementById('admin-nav-heads');
     const adminSyncBtn          = document.getElementById('admin-sync-btn');
+    const adminBackupBtn        = document.getElementById('admin-backup-btn');
     const adminSectionLabel     = document.getElementById('admin-section-label');
 
     const isAdmin = String(user.role).toLowerCase() === 'admin';
@@ -133,6 +134,7 @@ function initializeUserSession(user) {
         if (adminBtnApprovalLinks) adminBtnApprovalLinks.classList.remove('hidden');
         if (adminBtnHeads)         adminBtnHeads.classList.remove('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.remove('hidden');
+        if (adminBackupBtn)        adminBackupBtn.classList.remove('hidden');
         if (adminSectionLabel)     adminSectionLabel.classList.remove('hidden');
     } else {
         if (adminBtnCommand)       adminBtnCommand.classList.add('hidden');
@@ -140,6 +142,7 @@ function initializeUserSession(user) {
         if (adminBtnApprovalLinks) adminBtnApprovalLinks.classList.add('hidden');
         if (adminBtnHeads)         adminBtnHeads.classList.add('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.add('hidden');
+        if (adminBackupBtn)        adminBackupBtn.classList.add('hidden');
         if (adminSectionLabel)     adminSectionLabel.classList.add('hidden');
     }
 

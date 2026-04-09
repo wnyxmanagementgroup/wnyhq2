@@ -233,55 +233,85 @@ async function fetchUserRequests(forceRefresh = false) {
     if (noMsg) noMsg.classList.add('hidden');
 
     try {
-        // 1. ดึงข้อมูลหลักจาก Google Sheets (GAS)
-        const result = await apiCall('GET', 'getRequestsByYear', { 
-            year: selectedYear, 
-            username: user.username 
-        });
+        let requests = [];
+        let usedFirestore = false;
 
-        let requests = (result.status === 'success') ? result.data || [] : [];
-
-        // 2. ดึงข้อมูลจาก Firebase มาทับ (เพื่อให้ได้ลิงก์ล่าสุดแบบ Real-time)
+        // ── 1. Firestore ก่อน (เร็ว, real-time) ──
         if (typeof db !== 'undefined') {
             try {
                 const snapshot = await db.collection('requests')
                     .where('username', '==', user.username)
                     .get();
-                
-                const firebaseData = {};
-                snapshot.forEach(doc => { firebaseData[doc.id] = doc.data(); });
 
-                requests = requests.map(req => {
-                    const safeId = req.id ? req.id.replace(/[\/\\:\.]/g, '-') : '';
-                    const fbDoc = safeId ? firebaseData[safeId] : null;
-                    
-                    if (fbDoc) {
+                if (!snapshot.empty) {
+                    const yearAD = selectedYear - 543;
+                    requests = snapshot.docs
+                        .map(doc => {
+                            const d = doc.data();
+                            // แปลง Firestore Timestamp
+                            if (d.timestamp && d.timestamp.toDate) d.timestamp = d.timestamp.toDate().toISOString();
+                            if (d.lastUpdated && d.lastUpdated.toDate) d.lastUpdated = d.lastUpdated.toDate().toISOString();
+                            return { ...d, _source: 'firestore' };
+                        })
+                        .filter(req => {
+                            // กรองตามปี
+                            if (!req.docDate) return true; // ไม่มีวันที่ ให้ผ่าน
+                            const reqYear = new Date(req.docDate).getFullYear();
+                            return reqYear === yearAD;
+                        });
+                    usedFirestore = requests.length > 0;
+                    console.log(`⚡ Loaded ${requests.length} requests from Firestore`);
+                }
+            } catch (fbErr) {
+                console.warn('⚠️ Firestore fetch failed, falling back to GAS:', fbErr.message);
+            }
+        }
+
+        // ── 2. GAS Sheets fallback (ถ้า Firestore ไม่มีข้อมูลหรือล้มเหลว) ──
+        if (!usedFirestore) {
+            console.log('📡 Loading from GAS Sheets (fallback)...');
+            const result = await apiCall('GET', 'getRequestsByYear', {
+                year: selectedYear,
+                username: user.username
+            });
+            const gasRequests = (result.status === 'success') ? result.data || [] : [];
+
+            // Merge ข้อมูล GAS + Firestore (Firestore ทับ GAS สำหรับฟิลด์ที่อัปเดตแล้ว)
+            if (typeof db !== 'undefined' && gasRequests.length > 0) {
+                try {
+                    const fbSnap = await db.collection('requests').where('username', '==', user.username).get();
+                    const fbMap = {};
+                    fbSnap.forEach(doc => { fbMap[doc.id] = doc.data(); });
+
+                    requests = gasRequests.map(req => {
+                        const safeId = req.id ? req.id.replace(/[\/\\:\.]/g, '-') : '';
+                        const fbDoc = safeId ? fbMap[safeId] : null;
+                        if (!fbDoc) return req;
                         return {
                             ...req,
                             fileUrl:          fbDoc.fileUrl          || req.fileUrl,
                             pdfUrl:           fbDoc.pdfUrl           || req.pdfUrl,
-                            memoPdfUrl:       fbDoc.memoPdfUrl        || req.memoPdfUrl,
-                            completedMemoUrl: fbDoc.completedMemoUrl  || req.completedMemoUrl,
-                            commandPdfUrl:    fbDoc.commandPdfUrl     || fbDoc.commandBookUrl || req.commandPdfUrl,
-                            dispatchBookUrl:  fbDoc.dispatchBookUrl   || fbDoc.dispatchBookPdfUrl || req.dispatchBookUrl,
-                            status:           fbDoc.status            || req.status,
-                            commandStatus:    fbDoc.commandStatus     || req.commandStatus,
-                            // ★ ข้อมูลการตีกลับจาก Firestore
-                            docStatus:        fbDoc.docStatus         || req.docStatus         || '',
-                            rejectionReason:  fbDoc.rejectionReason   || req.rejectionReason   || '',
-                            rejectedBy:       fbDoc.rejectedBy        || req.rejectedBy        || '',
-                            // ★★ wasRejected ต้องดึงจาก Firestore ด้วย (ใช้ใน isFixing fallback)
-                            wasRejected:      fbDoc.wasRejected       ?? req.wasRejected       ?? false,
+                            memoPdfUrl:       fbDoc.memoPdfUrl       || req.memoPdfUrl,
+                            completedMemoUrl: fbDoc.completedMemoUrl || req.completedMemoUrl,
+                            commandPdfUrl:    fbDoc.commandPdfUrl    || fbDoc.commandBookUrl || req.commandPdfUrl,
+                            dispatchBookUrl:  fbDoc.dispatchBookUrl  || fbDoc.dispatchBookPdfUrl || req.dispatchBookUrl,
+                            status:           fbDoc.status           || req.status,
+                            commandStatus:    fbDoc.commandStatus    || req.commandStatus,
+                            docStatus:        fbDoc.docStatus        || req.docStatus        || '',
+                            rejectionReason:  fbDoc.rejectionReason  || req.rejectionReason  || '',
+                            rejectedBy:       fbDoc.rejectedBy       || req.rejectedBy       || '',
+                            wasRejected:      fbDoc.wasRejected      ?? req.wasRejected      ?? false,
                         };
-                    }
-                    return req;
-                });
-            } catch (e) {
-                console.warn("Firebase Sync Error:", e);
+                    });
+                } catch (e) {
+                    requests = gasRequests;
+                }
+            } else {
+                requests = gasRequests;
             }
         }
 
-        // 3. เรียงลำดับ (ใหม่ -> เก่า)
+        // ── 3. เรียงลำดับ (ใหม่ -> เก่า) ──
         if (requests.length > 0) {
             requests.sort((a, b) => {
                 const getTime = (d) => d ? new Date(d).getTime() : 0;
@@ -289,12 +319,12 @@ async function fetchUserRequests(forceRefresh = false) {
             });
         }
 
-        // --- 💾 บันทึกข้อมูลลง CACHE ---
+        // ── 4. บันทึกลง Cache ──
         window.userRequestsCache = requests;
         window.userRequestsCacheTime = Date.now();
         window.userRequestsCacheYear = selectedYear;
 
-        // 4. แสดงผล
+        // ── 5. แสดงผล ──
         renderUserRequests(requests);
 
     } catch (error) {
@@ -1156,21 +1186,33 @@ async function generateDocumentFromDraft() {
             finalBlob = await promptForSignature(pdfBlob, signatureBase64);
         }
 
-        // Step 5: อัปโหลดไฟล์ขึ้น Drive
+        // Step 5: อัปโหลด PDF (Firebase Storage ก่อน, GAS Drive เป็น fallback)
         setBtnStatus('กำลังอัปโหลดไฟล์...', true);
-        const finalBase64 = await blobToBase64(finalBlob);
         const safeId = formData.requestId.replace(/[\/\\\:\.\s]/g, '-');
         const filename = `memo_EDIT_${safeId}_${Date.now()}.pdf`;
+        let newFileUrl = '';
 
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data: finalBase64,
-            filename: filename,
-            mimeType: 'application/pdf',
-            username: formData.username
-        });
-
-        if (uploadRes.status !== 'success') throw new Error('อัปโหลดไฟล์ไม่สำเร็จ: ' + (uploadRes.message || ''));
-        const newFileUrl = uploadRes.url;
+        try {
+            // ✅ Firebase Storage ก่อน (ไม่ต้องพึ่ง DriveApp)
+            newFileUrl = await uploadPdfToStorage(finalBlob, formData.username, filename);
+            console.log('✅ Edit PDF uploaded to Firebase Storage:', newFileUrl);
+        } catch (storageErr) {
+            console.warn('⚠️ Storage upload failed, trying GAS Drive:', storageErr.message);
+            try {
+                const finalBase64 = await blobToBase64(finalBlob);
+                const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
+                    data: finalBase64, filename: filename,
+                    mimeType: 'application/pdf', username: formData.username
+                });
+                if (uploadRes.status === 'success') {
+                    newFileUrl = uploadRes.url;
+                    console.log('✅ Edit PDF uploaded to Drive (fallback):', newFileUrl);
+                }
+            } catch (driveErr) {
+                console.warn('⚠️ Drive upload also failed:', driveErr.message);
+            }
+        }
+        if (!newFileUrl) throw new Error('ไม่สามารถอัปโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
         console.log('✅ Edit PDF URL:', newFileUrl);
 
         // Step 6: บันทึกข้อมูลลง Firestore
@@ -1836,16 +1878,23 @@ async function handleRequestFormSubmit(e) {
         formData.status = 'Pending'; 
         formData.docStatus = targetDocStatus; 
 
-        // --- Step 1: ขอเลขที่เอกสาร (เฉพาะสร้างใหม่เท่านั้น) ---
+        // --- Step 1: สร้างเลขที่เอกสาร (Firestore Counter — ไม่ต้องรอ GAS) ---
         if (!isEdit) {
             setBtnStatus('กำลังขอเลขที่เอกสาร...');
-            const createPayload = { ...formData, preGeneratedPdfUrl: 'SKIP_GENERATION' };
-            const createResult = await apiCall('POST', 'createRequest', createPayload);
-            
-            if (createResult.status !== 'success') throw new Error(createResult.message || "ไม่สามารถขอเลขที่เอกสารได้");
-            realId = createResult.id || createResult.data?.id;
-            if (!realId) throw new Error("Server ไม่ได้ส่งเลขที่เอกสารกลับมา");
-            console.log("✅ ได้รับเลขที่:", realId);
+            try {
+                // ✅ Firestore-first: สร้าง ID จาก Firestore Atomic Counter
+                realId = await generateRequestId(formData.docDate);
+                console.log("✅ Generated ID (Firestore):", realId);
+            } catch (idErr) {
+                console.warn('⚠️ Firestore ID failed, falling back to GAS:', idErr.message);
+                // Fallback: ขอ ID จาก GAS ถ้า Firestore ล้มเหลว
+                const createPayload = { ...formData, preGeneratedPdfUrl: 'SKIP_GENERATION' };
+                const createResult = await apiCall('POST', 'createRequest', createPayload);
+                if (createResult.status !== 'success') throw new Error(createResult.message || "ไม่สามารถขอเลขที่เอกสารได้");
+                realId = createResult.id || createResult.data?.id;
+                if (!realId) throw new Error("Server ไม่ได้ส่งเลขที่เอกสารกลับมา");
+                console.log("✅ ได้รับเลขที่ (GAS fallback):", realId);
+            }
         }
 
         // --- Step 2: สร้าง PDF จาก Cloud Run ---
@@ -1867,54 +1916,73 @@ async function handleRequestFormSubmit(e) {
             showAlert('กำลังดำเนินการ', 'กำลังบันทึกข้อมูล... กรุณารอสักครู่', false);
         }
 
-        // --- Step 3: อัปโหลดไฟล์ไป Google Drive ---
+        // --- Step 3: อัปโหลด PDF ไป Firebase Storage (ไม่ต้องพึ่ง DriveApp) ---
         setBtnStatus('กำลังบันทึกไฟล์...');
-        const finalBase64 = await blobToBase64(pdfBlob);
-        const safeIdForFile = realId.replace(/[\/\\\:\.\s]/g, '-'); 
-        const safeFilename = `memo_${safeIdForFile}.pdf`;
+        const safeIdForFile = realId.replace(/[\/\\\:\.\s]/g, '-');
+        const safeFilename = `memo_${safeIdForFile}_${Date.now()}.pdf`;
+        let finalFileUrl = '';
 
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data: finalBase64,
-            filename: safeFilename,
-            mimeType: 'application/pdf',
-            username: user.username,
-            requestId: realId
-        });
+        try {
+            // ✅ อัปโหลดไป Firebase Storage ก่อน (ไม่มี DriveApp error)
+            finalFileUrl = await uploadPdfToStorage(pdfBlob, user.username, safeFilename);
+            console.log('✅ PDF uploaded to Firebase Storage:', finalFileUrl);
+        } catch (storageErr) {
+            console.warn('⚠️ Firebase Storage upload failed, trying GAS Drive:', storageErr.message);
+            // Fallback: ลอง GAS Drive upload (อาจล้มเหลวถ้า DriveApp ยังไม่พร้อม)
+            try {
+                const finalBase64 = await blobToBase64(pdfBlob);
+                const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
+                    data: finalBase64, filename: safeFilename,
+                    mimeType: 'application/pdf', username: user.username, requestId: realId
+                });
+                if (uploadRes.status === 'success') {
+                    finalFileUrl = uploadRes.url;
+                    console.log('✅ PDF uploaded to Google Drive (fallback):', finalFileUrl);
+                }
+            } catch (driveErr) {
+                console.warn('⚠️ Drive upload also failed, saving without PDF URL:', driveErr.message);
+                // บันทึกข้อมูลต่อไปโดยไม่มี PDF URL (จะ retry ทีหลัง)
+                finalFileUrl = '';
+            }
+        }
 
-        if (uploadRes.status !== 'success') throw new Error("อัปโหลดไม่สำเร็จ: " + uploadRes.message);
-        const finalFileUrl = uploadRes.url;
-
-        // --- Step 4: อัปเดตข้อมูลกลับฐานข้อมูล ---
-        // ไม่ว่าจะ Create หรือ Edit ตรงนี้ใช้ updateRequest ได้เลยเพราะมีแถวข้อมูลใน Sheet/Firebase แล้ว
+        // --- Step 4: บันทึกฐานข้อมูล (Firestore-first, GAS async) ---
         setBtnStatus('กำลังปรับปรุงฐานข้อมูล...');
 
         const updatePayload = {
             requestId: realId,
-            fileUrl: finalFileUrl,      
+            fileUrl: finalFileUrl,
             pdfUrl: finalFileUrl,
-            memoPdfUrl: finalFileUrl, 
-            status: 'Pending' // รีเซ็ตสถานะกลับเป็น Pending กรณีโดนตีกลับมาแก้
+            memoPdfUrl: finalFileUrl,
+            pdfStatus: finalFileUrl ? 'ready' : 'pending',
+            status: 'Pending'
         };
 
-        // 4.1 อัปเดต Google Sheet
-        await apiCall('POST', 'updateRequest', updatePayload);
-
-        // 4.2 อัปเดต Firebase (ใช้ merge เพื่อไม่ให้ข้อมูลอื่นหาย)
+        // 4.1 ✅ Firestore ก่อน (primary — ผู้ใช้เห็นข้อมูลทันที)
         if (typeof db !== 'undefined') {
             const docId = realId.replace(/[\/\\\:\.]/g, '-');
             const fsPayload = {
                 ...formData,
                 ...updatePayload,
                 id: realId,
+                syncedToSheets: false,
+                _source: 'firestore',
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             };
-            // 💾 เก็บ PDF ใน Firestore เพื่อการโหลดที่รวดเร็ว (ไม่ต้องผ่าน GAS proxy)
-            // finalBase64 คือ raw base64 (blobToBase64 ตัด prefix ออกแล้ว)
-            // ตรวจขนาด: Firestore doc limit 1MB → เก็บเฉพาะ PDF ที่ ≤ 900KB (base64 string)
-            if (typeof finalBase64 === 'string' && finalBase64.length > 0 && finalBase64.length <= 900_000) {
-                fsPayload.pdfBase64 = finalBase64;
-            }
+            // ลบ field ที่ไม่ควรเก็บใน Firestore
+            delete fsPayload.pdfBase64;
+            delete fsPayload.signatureBase64;
+            delete fsPayload.action;
+            delete fsPayload.btnId;
             await db.collection('requests').doc(docId).set(fsPayload, { merge: true });
+            console.log('✅ Saved to Firestore:', docId);
+
+            // 4.2 Sync ไป GAS Sheets ในพื้นหลัง (ไม่รอ, ไม่ block)
+            const gasPayload = { ...fsPayload, preGeneratedPdfUrl: finalFileUrl || 'SKIP_GENERATION' };
+            syncToGASBackground(isEdit ? 'updateRequest' : 'saveRequestAndGeneratePdf', gasPayload, docId);
+        } else {
+            // Fallback: ถ้าไม่มี Firestore ให้ใช้ GAS โดยตรง (กรณี Firebase down)
+            await apiCall('POST', 'updateRequest', updatePayload);
         }
 
         document.getElementById('alert-modal').style.display = 'none';

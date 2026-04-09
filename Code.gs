@@ -148,11 +148,12 @@ function doPost(e) {
       
       // --- System ---
       case "doSystemBackup": result = doSystemBackup(); break;
-case "sendCompletionEmail":
-         // เรียกฟังก์ชันส่งอีเมล (ที่มีอยู่แล้วใน code.gs แต่อยู่ข้างล่าง)
-         sendCompletionEmail(payload.requestId, payload.username, payload.status);
-         result = { status: "success", message: "ส่งอีเมลแจ้งเตือนเรียบร้อยแล้ว" };
-         break;
+      case "sendCompletionEmail":
+        sendCompletionEmail(payload.requestId, payload.username, payload.status);
+        result = { status: "success", message: "ส่งอีเมลแจ้งเตือนเรียบร้อยแล้ว" };
+        break;
+      // --- Firestore → Sheets Batch Sync (monthly backup) ---
+      case "batchSyncFromFirestore": result = batchSyncFromFirestore(payload); break;
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -2127,5 +2128,179 @@ function createAutoMemoRecord(requestId, username) {
   const reqRowIndex = reqData.findIndex(row => String(row[reqIdCol]) === String(requestId));
   if (reqRowIndex > 0 && reqStatusCol > -1) {
      requestSheet.getRange(reqRowIndex + 1, reqStatusCol + 1).setValue("Submitted"); // หรือ "รอการตรวจสอบ"
+  }
+}
+
+// ==================================================================
+// === FIRESTORE → SHEETS BATCH SYNC (สำรองข้อมูลรายเดือน) ===========
+// ==================================================================
+
+/**
+ * รับข้อมูล batch จาก Firestore แล้วเขียนลง Google Sheets
+ * เรียกผ่าน POST action: "batchSyncFromFirestore"
+ * payload: { requests: [...], year: 2568, syncedAt: "..." }
+ */
+function batchSyncFromFirestore(payload) {
+  try {
+    const { requests, year, syncedAt } = payload;
+    if (!requests || !Array.isArray(requests) || requests.length === 0) {
+      return { status: "success", message: "ไม่มีข้อมูลที่จะ sync", count: 0 };
+    }
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const requestSheet = ss.getSheetByName("Requests");
+    ensureSheetColumns(requestSheet, [
+      "RequestId", "CreatedBy", "DocDate", "RequesterName", "RequesterPosition",
+      "Location", "Purpose", "StartDate", "EndDate", "ExpenseOption", "ExpenseItems",
+      "TotalExpense", "VehicleOption", "LicensePlate", "Department", "HeadName",
+      "PdfUrl", "DocUrl", "CommandPdfUrl", "CommandStatus", "Status",
+      "DispatchBookPdfUrl", "Province", "StayAt", "CompletedMemoUrl", "Timestamp",
+      "SyncedFromFirestore", "FirestoreSyncedAt"
+    ]);
+
+    const headers = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+    const idCol = findColumnIndex(headers, "RequestId");
+
+    // อ่านข้อมูลที่มีอยู่ใน Sheet ทั้งหมด (เพื่อเช็คว่ามีแถวนี้แล้วหรือยัง)
+    const existingData = requestSheet.getDataRange().getValues();
+    const existingIds = new Set();
+    for (let i = 1; i < existingData.length; i++) {
+      if (existingData[i][idCol]) existingIds.add(String(existingData[i][idCol]).trim());
+    }
+
+    let upsertedCount = 0;
+    let insertedCount = 0;
+
+    for (const req of requests) {
+      const requestId = req.id || req.requestId;
+      if (!requestId) continue;
+
+      const formatDate = (d) => {
+        if (!d) return "";
+        try { return Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd"); } catch(e) { return d; }
+      };
+
+      const rowObject = {
+        requestid: requestId,
+        createdby: req.username || req.createdby || "",
+        docdate: formatDate(req.docDate),
+        requestername: req.requesterName || "",
+        requesterposition: req.requesterPosition || "",
+        location: req.location || "",
+        purpose: req.purpose || "",
+        startdate: formatDate(req.startDate),
+        enddate: formatDate(req.endDate),
+        expenseoption: req.expenseOption || "",
+        expenseitems: typeof req.expenseItems === 'object' ? JSON.stringify(req.expenseItems) : (req.expenseItems || ""),
+        totalexpense: Number(req.totalExpense) || 0,
+        vehicleoption: req.vehicleOption || "",
+        licenseplate: req.licensePlate || "",
+        department: req.department || "",
+        headname: req.headName || "",
+        pdfurl: req.pdfUrl || req.fileUrl || req.memoPdfUrl || "",
+        docurl: req.docUrl || req.gasDocUrl || "",
+        commandpdfurl: req.commandPdfUrl || req.commandBookUrl || "",
+        commandstatus: req.commandStatus || "",
+        status: req.status || "กำลังดำเนินการ",
+        dispatchbookpdfurl: req.dispatchBookUrl || req.dispatchBookPdfUrl || "",
+        province: req.province || "",
+        stayat: req.stayAt || "",
+        completedmemourl: req.completedMemoUrl || "",
+        timestamp: formatDate(req.timestamp || req.docDate),
+        syncedfromfirestore: "TRUE",
+        firestoresyncedat: syncedAt || new Date().toISOString()
+      };
+
+      const rowData = headers.map(h => {
+        const key = h.toLowerCase().replace(/\s+/g, "");
+        return rowObject[key] !== undefined ? rowObject[key] : "";
+      });
+
+      if (existingIds.has(requestId)) {
+        // Update แถวที่มีอยู่แล้ว
+        const rowIdx = existingData.findIndex(r => String(r[idCol]).trim() === requestId);
+        if (rowIdx > 0) {
+          requestSheet.getRange(rowIdx + 1, 1, 1, rowData.length).setValues([rowData]);
+          upsertedCount++;
+        }
+      } else {
+        // Insert แถวใหม่
+        requestSheet.appendRow(rowData);
+        existingIds.add(requestId);
+        insertedCount++;
+      }
+    }
+
+    Logger.log(`✅ Batch sync complete: ${insertedCount} inserted, ${upsertedCount} updated`);
+    return {
+      status: "success",
+      message: `Sync เสร็จสิ้น: เพิ่มใหม่ ${insertedCount} รายการ, อัปเดต ${upsertedCount} รายการ`,
+      inserted: insertedCount,
+      updated: upsertedCount,
+      total: insertedCount + upsertedCount
+    };
+
+  } catch (error) {
+    Logger.log("batchSyncFromFirestore Error: " + error.message);
+    return { status: "error", message: error.message };
+  }
+}
+
+/**
+ * ตั้งค่า Time Trigger สำรองข้อมูลอัตโนมัติทุกเดือน (ทุกวันที่ 1 เวลา 02:00)
+ * รัน setupMonthlyBackupTrigger() ครั้งเดียวใน GAS Editor เพื่อติดตั้ง Trigger
+ */
+function setupMonthlyBackupTrigger() {
+  // ลบ trigger เก่าที่มีชื่อเดียวกัน (ป้องกัน duplicate)
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const t of triggers) {
+    if (t.getHandlerFunction() === 'runMonthlyBackupEmail') {
+      ScriptApp.deleteTrigger(t);
+    }
+  }
+  // สร้าง trigger ใหม่: ทุกวันที่ 1 ของเดือน เวลา 02:00-03:00
+  ScriptApp.newTrigger('runMonthlyBackupEmail')
+    .timeBased()
+    .onMonthDay(1)
+    .atHour(2)
+    .create();
+  Logger.log('✅ Monthly backup trigger created (runs on 1st of each month at 2am)');
+}
+
+/**
+ * ส่งอีเมลแจ้งเตือน Admin ให้กด "สำรองข้อมูล" ทุกต้นเดือน
+ * (GAS ไม่สามารถอ่าน Firestore โดยตรง ต้องให้ Admin กด Sync จาก Web App)
+ */
+function runMonthlyBackupEmail() {
+  try {
+    const admins = getAdminEmails();
+    if (admins.length === 0) {
+      Logger.log('No admin emails found for monthly backup notification');
+      return;
+    }
+    const monthNames = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+                        'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+    const now = new Date();
+    const monthTH = monthNames[now.getMonth()];
+    const yearBE = now.getFullYear() + 543;
+
+    const subject = `[WNY App] แจ้งเตือน: กรุณาสำรองข้อมูลประจำเดือน ${monthTH} ${yearBE}`;
+    const body = `
+      <div style="font-family: 'Sarabun', sans-serif; max-width: 600px;">
+        <h2 style="color: #4f46e5;">แจ้งเตือนสำรองข้อมูลรายเดือน</h2>
+        <p>ถึงผู้ดูแลระบบ WNY App,</p>
+        <p>ถึงเวลาสำรองข้อมูลประจำเดือน <strong>${monthTH} ${yearBE}</strong> แล้ว</p>
+        <p>กรุณาเข้าสู่ระบบและคลิกปุ่ม <strong>"สำรองข้อมูล → Google Sheets"</strong> ในหน้า Admin เพื่อบันทึกข้อมูลทั้งหมดจาก Firestore ไปยัง Google Sheets</p>
+        <p style="color: #6b7280; font-size: 0.9em;">อีเมลนี้ส่งอัตโนมัติทุกวันที่ 1 ของเดือน</p>
+      </div>
+    `;
+    admins.forEach(email => {
+      try {
+        MailApp.sendEmail({ to: email, subject, htmlBody: body, name: 'ระบบ WNY App' });
+      } catch(e) { Logger.log('Email failed for ' + email + ': ' + e.message); }
+    });
+    Logger.log('✅ Monthly backup reminder emails sent to: ' + admins.join(', '));
+  } catch (error) {
+    Logger.log('runMonthlyBackupEmail Error: ' + error.message);
   }
 }

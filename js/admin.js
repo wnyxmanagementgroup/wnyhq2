@@ -55,95 +55,115 @@ async function fetchAllRequestsForCommand() {
         
         console.log(`📥 Fetching admin requests for year: ${selectedYear}`);
 
-        // 5. ดึงข้อมูลหลักจาก Google Sheets (Source of Truth)
+        // ── 5. ดึงข้อมูล: Firestore ก่อน, GAS Sheets เป็น fallback ──
         let requests = [];
-        const result = await apiCall('GET', 'getAllRequests');
-        
-        if (result.status === 'success') {
-            requests = result.data || [];
-        } else {
-            throw new Error(result.message || "Failed to fetch from Google Sheets");
-        }
+        let usedFirestore = false;
 
-        // 6. กรองข้อมูลตามปีงบประมาณ (Filter by Year)
-        requests = requests.filter(req => {
-            const idYear = req.id ? parseInt(req.id.split('/')[1]) : 0;
-            if (idYear > 0) return idYear === selectedYear; // เช็คจาก ID (แม่นยำที่สุด)
-            
-            // Fallback: เช็คจากวันที่เอกสาร
-            if (req.docDate) {
-                const docY = new Date(req.docDate).getFullYear() + 543;
-                return docY === selectedYear;
-            }
-            return false;
-        });
-
-        // 7. Merge ข้อมูลจาก Firestore (เพื่อเอาสถานะล่าสุดและลิงก์ไฟล์ Real-time)
+        // 5a. ลอง Firestore ก่อน (เร็ว, real-time)
         if (typeof db !== 'undefined') {
             try {
-                // ดึงข้อมูลทั้งหมดจาก Collection 'requests'
                 const snapshot = await db.collection('requests').get();
-                const firebaseData = {};
-                snapshot.forEach(doc => { firebaseData[doc.id] = doc.data(); });
+                if (!snapshot.empty) {
+                    const yearAD = selectedYear - 543;
+                    requests = snapshot.docs
+                        .map(doc => {
+                            const d = doc.data();
+                            if (d.timestamp && d.timestamp.toDate) d.timestamp = d.timestamp.toDate().toISOString();
+                            if (d.lastUpdated && d.lastUpdated.toDate) d.lastUpdated = d.lastUpdated.toDate().toISOString();
+                            // แปลง attendees
+                            let attendees = d.attendees || [];
+                            if (typeof attendees === 'string') {
+                                try { attendees = JSON.parse(attendees); } catch(e) { attendees = []; }
+                            }
+                            return { ...d, attendees, _source: 'firestore' };
+                        })
+                        .filter(req => {
+                            if (!req.id && !req.docDate) return false;
+                            // กรองตามปี (จาก ID ก่อน, docDate เป็น fallback)
+                            const idYear = req.id ? parseInt((req.id.split('/')[1]) || 0) : 0;
+                            if (idYear > 0) return idYear === selectedYear;
+                            if (req.docDate) return new Date(req.docDate).getFullYear() === yearAD;
+                            return false;
+                        });
+                    usedFirestore = requests.length > 0;
+                    console.log(`⚡ Admin loaded ${requests.length} requests from Firestore`);
+                }
+            } catch (fbErr) {
+                console.warn('⚠️ Admin Firestore fetch failed, using GAS:', fbErr.message);
+            }
+        }
 
-                requests = requests.map(req => {
-                    // สร้าง Key สำหรับค้นหาใน Firestore (แปลงตัวอักษรพิเศษเป็น -)
-                    const safeId = req.id ? req.id.replace(/[\/\\:\.]/g, '-') : '';
-                    const fbDoc = firebaseData[safeId];
+        // 5b. GAS Sheets fallback (ถ้า Firestore ว่างหรือล้มเหลว)
+        if (!usedFirestore) {
+            console.log('📡 Admin loading from GAS Sheets (fallback)...');
+            const result = await apiCall('GET', 'getAllRequests');
+            if (result.status !== 'success') {
+                throw new Error(result.message || 'Failed to fetch from Google Sheets');
+            }
+            let gasRequests = (result.data || []).filter(req => {
+                const idYear = req.id ? parseInt(req.id.split('/')[1]) : 0;
+                if (idYear > 0) return idYear === selectedYear;
+                if (req.docDate) return new Date(req.docDate).getFullYear() + 543 === selectedYear;
+                return false;
+            });
 
-                    // แปลงรายชื่อผู้ร่วมเดินทาง (ป้องกัน JSON Error)
-                    let sheetAttendees = [];
-                    try {
-                        if (typeof req.attendees === 'string') sheetAttendees = JSON.parse(req.attendees);
-                        else if (Array.isArray(req.attendees)) sheetAttendees = req.attendees;
-                    } catch(e) { sheetAttendees = []; }
+            // Merge Firestore data เข้ากับ GAS data
+            if (typeof db !== 'undefined' && gasRequests.length > 0) {
+                try {
+                    const fbSnap = await db.collection('requests').get();
+                    const fbMap = {};
+                    fbSnap.forEach(doc => { fbMap[doc.id] = doc.data(); });
 
-                    // แปลง attendees จาก Firestore (ถ้ามี)
-                    let fbAttendees = [];
-                    if (fbDoc && fbDoc.attendees) {
+                    requests = gasRequests.map(req => {
+                        const safeId = req.id ? req.id.replace(/[\/\\:\.]/g, '-') : '';
+                        const fbDoc = fbMap[safeId];
+
+                        let sheetAttendees = [];
                         try {
-                            if (typeof fbDoc.attendees === 'string') fbAttendees = JSON.parse(fbDoc.attendees);
-                            else if (Array.isArray(fbDoc.attendees)) fbAttendees = fbDoc.attendees;
-                        } catch(e) { fbAttendees = []; }
-                    }
+                            if (typeof req.attendees === 'string') sheetAttendees = JSON.parse(req.attendees);
+                            else if (Array.isArray(req.attendees)) sheetAttendees = req.attendees;
+                        } catch(e) { sheetAttendees = []; }
 
-                    if (fbDoc) {
-                        // ★★★ Firestore เป็น source หลักสำหรับข้อมูลฟอร์ม (เพราะ saveEdit/generateDoc sync ครบแล้ว)
-                        // GAS Sheet เป็น fallback เท่านั้น
+                        if (!fbDoc) return { ...req, attendees: sheetAttendees };
+
+                        let fbAttendees = [];
+                        if (fbDoc.attendees) {
+                            try {
+                                if (typeof fbDoc.attendees === 'string') fbAttendees = JSON.parse(fbDoc.attendees);
+                                else if (Array.isArray(fbDoc.attendees)) fbAttendees = fbDoc.attendees;
+                            } catch(e) { fbAttendees = []; }
+                        }
+
                         return {
                             ...req,
-                            // ── ข้อมูลฟอร์ม: ใช้ Firestore ก่อน (อัพเดตตาม edit ล่าสุดของผู้ใช้) ──
                             requesterName:     fbDoc.requesterName     || req.requesterName,
                             requesterPosition: fbDoc.requesterPosition || req.requesterPosition,
                             location:          fbDoc.location          || req.location,
                             purpose:           fbDoc.purpose           || req.purpose,
                             startDate:         fbDoc.startDate         || req.startDate,
                             endDate:           fbDoc.endDate           || req.endDate,
-                            // attendees: Firestore ก่อน (ถ้ามี) ไม่งั้นใช้ Sheet
-                            attendees: (fbAttendees.length > 0) ? fbAttendees : sheetAttendees,
+                            attendees:         (fbAttendees.length > 0) ? fbAttendees : sheetAttendees,
                             vehicleOption:     fbDoc.vehicleOption     || req.vehicleOption,
                             licensePlate:      fbDoc.licensePlate      || req.licensePlate,
                             expenseOption:     fbDoc.expenseOption     || req.expenseOption,
                             expenseItems:      fbDoc.expenseItems      || req.expenseItems,
                             totalExpense:      fbDoc.totalExpense      || req.totalExpense,
-                            // ── URLs: ใช้ Firestore เป็นหลัก ──
-                            pdfUrl:          fbDoc.pdfUrl          || fbDoc.fileUrl || req.pdfUrl,
-                            fileUrl:         fbDoc.fileUrl         || fbDoc.pdfUrl  || req.fileUrl,
-                            memoPdfUrl:      fbDoc.memoPdfUrl      || req.memoPdfUrl,
-                            commandPdfUrl:   fbDoc.commandPdfUrl   || fbDoc.commandBookUrl || req.commandPdfUrl,
-                            dispatchBookUrl: fbDoc.dispatchBookUrl || fbDoc.dispatchBookPdfUrl || req.dispatchBookUrl,
-                            // ── สถานะ ──
-                            status:        fbDoc.status        || req.status,
-                            commandStatus: fbDoc.commandStatus  || req.commandStatus,
-                            timestamp:     fbDoc.timestamp      || req.timestamp,
+                            pdfUrl:            fbDoc.pdfUrl            || fbDoc.fileUrl        || req.pdfUrl,
+                            fileUrl:           fbDoc.fileUrl           || fbDoc.pdfUrl         || req.fileUrl,
+                            memoPdfUrl:        fbDoc.memoPdfUrl        || req.memoPdfUrl,
+                            commandPdfUrl:     fbDoc.commandPdfUrl     || fbDoc.commandBookUrl || req.commandPdfUrl,
+                            dispatchBookUrl:   fbDoc.dispatchBookUrl   || fbDoc.dispatchBookPdfUrl || req.dispatchBookUrl,
+                            status:            fbDoc.status            || req.status,
+                            commandStatus:     fbDoc.commandStatus     || req.commandStatus,
+                            timestamp:         fbDoc.timestamp         || req.timestamp,
                         };
-                    }
-                    // ถ้าไม่เจอใน Firestore ให้ใช้ข้อมูลเดิมจาก Sheet
-                    return { ...req, attendees: sheetAttendees };
-                });
-            } catch (fbError) {
-                console.warn("⚠️ Firestore Merge Failed (Using Sheet Data only):", fbError);
-                // ไม่ throw error เพื่อให้ทำงานต่อได้โดยใช้ข้อมูลจาก Sheet
+                    });
+                } catch (fbErr) {
+                    console.warn('⚠️ Firestore merge failed, using GAS data only:', fbErr.message);
+                    requests = gasRequests;
+                }
+            } else {
+                requests = gasRequests;
             }
         }
 
@@ -2144,7 +2164,46 @@ async function syncAllDataFromSheetToFirebase() {
         if(btn) toggleLoader('admin-sync-btn', false);
     }
 }
-// [เพิ่มท้ายไฟล์]
+// --- FIRESTORE → SHEETS MONTHLY BACKUP (Admin) ---
+
+/**
+ * สำรองข้อมูลทั้งหมดจาก Firestore ไปยัง Google Sheets
+ * เรียกจากปุ่ม "สำรองข้อมูล → Google Sheets" ในหน้า Admin
+ */
+async function adminBackupFirestoreToSheets() {
+    if (!checkAdminAccess()) return;
+
+    const yearSelect = document.getElementById('admin-year-select');
+    const currentYear = new Date().getFullYear() + 543;
+    const selectedYear = yearSelect ? parseInt(yearSelect.value) : currentYear;
+
+    const confirmed = await showConfirm(
+        'ยืนยันการสำรองข้อมูล',
+        `ระบบจะส่งข้อมูลทั้งหมดในปี พ.ศ. ${selectedYear} จาก Firestore ไปบันทึกใน Google Sheets\nใช้เวลาสักครู่ กรุณารอ...`
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById('admin-backup-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader-sm"></span> กำลังสำรองข้อมูล...'; }
+
+    try {
+        showAlert('กำลังดำเนินการ', 'กำลังสำรองข้อมูลไปยัง Google Sheets... กรุณารอ', false);
+        const result = await backupFirestoreToSheets(selectedYear);
+        document.getElementById('alert-modal').style.display = 'none';
+
+        if (result.status === 'success') {
+            showAlert('สำเร็จ', result.message || `สำรองข้อมูล ${result.count || 0} รายการเรียบร้อยแล้ว`);
+        } else {
+            throw new Error(result.message || 'สำรองข้อมูลไม่สำเร็จ');
+        }
+    } catch (error) {
+        document.getElementById('alert-modal').style.display = 'none';
+        console.error('Backup error:', error);
+        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการสำรองข้อมูล: ' + error.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '💾 สำรองข้อมูล → Sheets'; }
+    }
+}
 
 // --- ANNOUNCEMENT MANAGEMENT ---
 

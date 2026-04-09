@@ -1,153 +1,214 @@
 /**
- * ฟังก์ชันหลักในการส่งคำขอไปราชการ (Hybrid Mode)
- * แก้ไข: อัปโหลดไฟล์ไปที่ Google Drive (ผ่าน GAS) แทน Firebase Storage
+ * firebaseService.js
+ * =====================================================================
+ * Firestore เป็นฐานข้อมูลหลัก — GAS/Sheets เป็น async backup เท่านั้น
+ * Firebase Storage เป็นที่เก็บ PDF หลัก — DriveApp ไม่ถูกเรียกใน critical path
+ * =====================================================================
  */
-async function submitRequestWithHybrid(formData) {
-    const tempId = Date.now().toString(); // ID ชั่วคราวก่อนได้เลข บค. จาก GAS
-    
-    try {
-        // --- 1. พยายามสร้าง PDF ผ่าน Cloud Run ก่อน ---
-        let preGeneratedUrl = null;
-        try {
-            console.log("🚀 Attempting Cloud Run PDF Generation...");
-            // ใช้ generateOfficialPDF แทน generatePdfFromCloudRun ที่ถูกลบออกแล้ว
-            const memoData = { ...formData, doctype: 'memo', btnId: null };
-            const { pdfBlob } = await generateOfficialPDF(memoData);
-            
-            // [แก้ไข] เปลี่ยนจาก uploadToStorage (Firebase) เป็น uploadGeneratedFile (GAS/Drive)
-            console.log("📤 Uploading to Google Drive via GAS...");
-            
-            // แปลง Blob เป็น Base64 เพื่อส่งผ่าน API
-            const base64Data = await blobToBase64(pdfBlob);
-            const fileName = `memo_pending_${tempId}.pdf`;
 
-            // เรียก GAS ให้บันทึกไฟล์ลง Drive
-            const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                data: base64Data,
-                filename: fileName,
-                mimeType: 'application/pdf',
-                username: formData.username || 'system',
-                folderType: 'temp' // (Optional) ถ้าฝั่ง GAS รองรับการแยกโฟลเดอร์
-            });
-
-            if (uploadRes.status === 'success') {
-                preGeneratedUrl = uploadRes.url;
-                console.log("✅ Drive Upload Success! File URL:", preGeneratedUrl);
-            } else {
-                throw new Error("GAS Upload Failed: " + uploadRes.message);
-            }
-
-        } catch (e) {
-            console.warn("⚠️ Cloud Run/Upload Failed, will fallback to GAS generation:", e.message);
-            // ถ้าตรงนี้พัง preGeneratedUrl จะเป็น null ซึ่งจะไปเปิด Trigger ให้ GAS สร้างเองใน Step ถัดไป
-        }
-
-        // --- 2. ส่งข้อมูลไปที่ GAS เพื่อบันทึกเลขที่ (ID) และลง Google Sheet ---
-        // ส่ง preGeneratedUrl (ที่เป็นลิงก์ Drive) ไปด้วย
-        const payload = {
-            ...formData,
-            preGeneratedPdfUrl: preGeneratedUrl, 
-            fileUrl: preGeneratedUrl, // ส่งไปสำรอง
-            action: 'saveRequestAndGeneratePdf'
-        };
-
-        const result = await apiCall('POST', 'saveRequestAndGeneratePdf', payload);
-        
-        if (result.status === 'success') {
-            const finalId = result.data.id;
-            const docId = finalId.replace(/[\/\\\:\.]/g, '-');
-            
-            // ใช้ URL ที่ดีที่สุด (จาก Drive ที่เราอัป หรือจากที่ GAS สร้างให้ใหม่)
-            const finalUrl = result.data.pdfUrl || result.data.fileUrl || preGeneratedUrl;
-
-            // --- 3. บันทึกข้อมูลลง Firestore (เพื่อให้หน้าเว็บเห็นปุ่มดาวน์โหลดทันที) ---
-            await db.collection('requests').doc(docId).set({
-                ...formData,
-                id: finalId,
-                pdfUrl: finalUrl,
-                fileUrl: finalUrl, // บันทึกให้ครบทุก field กันเหนียว
-                memoPdfUrl: finalUrl,
-                docUrl: result.data.docUrl,
-                status: 'กำลังดำเนินการ',
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            return result;
-        } else {
-            throw new Error(result.message || "GAS บันทึกข้อมูลไม่สำเร็จ");
-        }
-
-    } catch (error) {
-        console.error("🔥 Submission process failed:", error);
-        throw error;
-    }
-}
+// -----------------------------------------------------------------------
+// 1. ID GENERATION — สร้างเลขที่เอกสารด้วย Firestore Atomic Counter
+//    (แทนการเรียก GAS ซึ่งต้องรอนาน)
+// -----------------------------------------------------------------------
 
 /**
- * ปรับปรุงการสร้างคำสั่ง (Command) ให้เป็นแบบ Serial Success
- * แก้ไข: อัปโหลดไฟล์ไปที่ Google Drive (ผ่าน GAS) แทน Firebase Storage
+ * สร้างเลขที่เอกสารรูปแบบ "บค001/2568" ด้วย Firestore Transaction
+ * ปลอดภัยจาก race condition เพราะใช้ Transaction
+ */
+async function generateRequestId(docDate) {
+    if (!db) throw new Error('Firestore not initialized');
+
+    const date = new Date(docDate);
+    if (isNaN(date.getTime())) throw new Error('วันที่เอกสารไม่ถูกต้อง');
+
+    const yearBE = date.getFullYear() + 543;
+    const counterRef = db.doc(`counters/requests_${yearBE}`);
+
+    return await db.runTransaction(async (t) => {
+        const counterDoc = await t.get(counterRef);
+        const count = counterDoc.exists ? (counterDoc.data().count || 0) + 1 : 1;
+        t.set(counterRef, {
+            count,
+            year: yearBE,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return `บค${String(count).padStart(3, '0')}/${yearBE}`;
+    });
+}
+
+// -----------------------------------------------------------------------
+// 2. PDF UPLOAD — อัปโหลด PDF ไปยัง Firebase Storage
+//    (ไม่ต้องพึ่ง DriveApp ของ GAS เลย)
+// -----------------------------------------------------------------------
+
+/**
+ * อัปโหลด PDF Blob ไปยัง Firebase Storage
+ * คืนค่า Download URL ที่ใช้งานได้ทันที
+ */
+async function uploadPdfToStorage(pdfBlob, username, filename) {
+    if (typeof firebase === 'undefined' || !firebase.storage) {
+        throw new Error('Firebase Storage SDK not available');
+    }
+    const storage = firebase.storage();
+    const safeUsername = (username || 'unknown').replace(/[^a-zA-Z0-9ก-๙_-]/g, '_');
+    const safeFilename = filename || `${safeUsername}_${Date.now()}.pdf`;
+    const storageRef = storage.ref(`pdfs/${safeUsername}/${safeFilename}`);
+
+    const snapshot = await storageRef.put(pdfBlob, {
+        contentType: 'application/pdf',
+        customMetadata: { uploadedBy: username || 'system', uploadedAt: new Date().toISOString() }
+    });
+    const downloadUrl = await snapshot.ref.getDownloadURL();
+    return downloadUrl;
+}
+
+// -----------------------------------------------------------------------
+// 3. BACKGROUND GAS SYNC — ส่งข้อมูลไป GAS/Sheets แบบ Async
+//    ไม่บล็อก UI, ไม่แสดง error ถ้าล้มเหลว (เป็นแค่ backup)
+// -----------------------------------------------------------------------
+
+/**
+ * ส่งข้อมูลไป GAS ในพื้นหลัง — ไม่ block, ไม่ throw error ถ้าล้มเหลว
+ * @param {string} action  - GAS action name
+ * @param {object} payload - ข้อมูลที่จะส่ง
+ * @param {string} docId   - Firestore doc ID สำหรับอัปเดต URL กลับ (optional)
+ */
+function syncToGASBackground(action, payload, docId = null) {
+    // ลบ field ใหญ่ที่ไม่จำเป็นก่อนส่งไป GAS
+    const cleanPayload = { ...payload };
+    delete cleanPayload.pdfBase64;
+    delete cleanPayload.signatureBase64;
+    delete cleanPayload._source;
+
+    console.log(`🔄 Background GAS sync: ${action} (docId: ${docId || 'none'})`);
+
+    apiCall('POST', action, cleanPayload)
+        .then(result => {
+            if (result && result.status === 'success') {
+                console.log(`✅ GAS sync success: ${action}`);
+                if (docId && db) {
+                    const updateData = {
+                        syncedToSheets: true,
+                        sheetsSyncedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    // ถ้า GAS สร้าง Google Doc ให้ เก็บ URL ไว้ด้วยเพื่อใช้ download .docx
+                    if (result.data && result.data.docUrl) {
+                        updateData.gasDocUrl = result.data.docUrl;
+                    }
+                    db.collection('requests').doc(docId)
+                        .update(updateData)
+                        .catch(() => {}); // ไม่ throw ถ้า update Firestore ล้มเหลว
+                }
+            } else {
+                console.warn(`⚠️ GAS sync non-success: ${action}`, result?.message);
+            }
+        })
+        .catch(e => {
+            console.warn(`⚠️ Background GAS sync failed (non-critical): ${action}`, e.message);
+        });
+}
+
+// -----------------------------------------------------------------------
+// 4. SUBMIT REQUEST (Firestore-first)
+// -----------------------------------------------------------------------
+
+/**
+ * ส่งคำขอไปราชการ — Firestore เป็นหลัก, GAS Sheets เป็น async backup
+ * ไม่ต้องรอ GAS เลย ผู้ใช้เห็นข้อมูลทันที
+ */
+async function submitRequestWithHybrid(formData) {
+    // 1. สร้าง ID จาก Firestore Counter (ไม่ต้องเรียก GAS)
+    const requestId = await generateRequestId(formData.docDate);
+    const docId = requestId.replace(/[\/\\:\.]/g, '-');
+
+    console.log('📝 Generated ID:', requestId, '→ docId:', docId);
+
+    // 2. เตรียมข้อมูลที่จะบันทึก Firestore
+    const firestorePayload = { ...formData };
+    delete firestorePayload.action;
+    delete firestorePayload.btnId;
+    delete firestorePayload.pdfBase64;
+    delete firestorePayload.signatureBase64;
+
+    // 3. บันทึกลง Firestore ทันที (primary write — ไม่รอ PDF, ไม่รอ GAS)
+    await db.collection('requests').doc(docId).set({
+        ...firestorePayload,
+        id: requestId,
+        status: 'กำลังดำเนินการ',
+        pdfStatus: 'pending',
+        syncedToSheets: false,
+        _source: 'firestore',
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    console.log('✅ Saved to Firestore:', docId);
+
+    // 4. Sync ไป GAS Sheets ในพื้นหลัง (ไม่ block)
+    syncToGASBackground('saveRequestAndGeneratePdf', {
+        ...firestorePayload,
+        id: requestId,
+        preGeneratedPdfUrl: formData.pdfUrl || 'SKIP_GENERATION'
+    }, docId);
+
+    return { status: 'success', data: { id: requestId, docId } };
+}
+
+// -----------------------------------------------------------------------
+// 5. GENERATE COMMAND (Firestore-first)
+// -----------------------------------------------------------------------
+
+/**
+ * สร้างคำสั่งไปราชการ — Firestore-first, GAS async
  */
 async function generateCommandHybrid(data) {
-    if (!data.id) throw new Error("ไม่พบรหัสเอกสาร (data.id) สำหรับการสร้างคำสั่ง");
-    const docId = data.id.replace(/[\/\\\:\.]/g, '-');
-    
+    if (!data.id) throw new Error('ไม่พบรหัสเอกสาร (data.id) สำหรับการสร้างคำสั่ง');
+    const docId = data.id.replace(/[\/\\:\.]/g, '-');
+
     try {
-        // 1. ลอง Cloud Run ก่อน
-        let cloudRunUrl = null;
+        // 1. สร้าง PDF ผ่าน Cloud Run ก่อน
+        let commandPdfUrl = '';
+        let commandDocUrl = '';
+
         try {
             let templateName = PDF_ENGINE_CONFIG.TEMPLATES.COMMAND_SOLO;
             if (data.attendees && data.attendees.length > 0) {
-                templateName = data.attendees.length <= 15 
-                    ? PDF_ENGINE_CONFIG.TEMPLATES.COMMAND_SMALL 
+                templateName = data.attendees.length <= 15
+                    ? PDF_ENGINE_CONFIG.TEMPLATES.COMMAND_SMALL
                     : PDF_ENGINE_CONFIG.TEMPLATES.COMMAND_LARGE;
             }
+            const commandData = {
+                ...data,
+                doctype: 'command',
+                templateType: templateName.replace('template_command_', '').replace('.docx', ''),
+                btnId: null
+            };
+            const { pdfBlob } = await generateOfficialPDF(commandData);
 
-            // ใช้ generateOfficialPDF แทน generatePdfFromCloudRun ที่ถูกลบออกแล้ว
-            const commandData = { ...data, doctype: 'command', templateType: templateName.replace('template_command_', '').replace('.docx', ''), btnId: null };
-            const { pdfBlob: finalPdfBlob } = await generateOfficialPDF(commandData);
-            
-            // [แก้ไข] เปลี่ยนจาก uploadToStorage เป็น uploadGeneratedFile (Drive)
+            // อัปโหลดไป Firebase Storage
             const filename = `command_${docId}_${Date.now()}.pdf`;
-            const base64Data = await blobToBase64(finalPdfBlob);
-            
-            const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                data: base64Data,
-                filename: filename,
-                mimeType: 'application/pdf',
-                username: data.username || 'admin'
-            });
-
-            if (uploadRes.status === 'success') {
-                cloudRunUrl = uploadRes.url;
-            }
+            commandPdfUrl = await uploadPdfToStorage(pdfBlob, data.username || data.createdby || 'admin', filename);
+            console.log('✅ Command PDF uploaded to Storage:', commandPdfUrl);
 
         } catch (e) {
-            console.warn("Cloud Run Command failed, letting GAS handle it.", e);
+            console.warn('⚠️ Command PDF generation failed, will use GAS fallback:', e.message);
         }
 
-        // 2. เรียก GAS: ส่ง cloudRunUrl (Drive Link) ไปด้วย 
-        const gasPayload = {
-            ...data,
-            preGeneratedPdfUrl: cloudRunUrl,
-            action: 'generateCommand'
-        };
-
-        const gasResult = await apiCall('POST', 'generateCommand', gasPayload);
-
-        // 3. บันทึกผลลัพธ์ลง Firestore หลังทุกอย่างใน GAS เสร็จสิ้น
-        const gasData = (gasResult && gasResult.data) ? gasResult.data : {};
-        const finalUrl = gasData.pdfUrl || cloudRunUrl; // ใช้ค่าจาก GAS (ถ้ามี) หรือค่าที่เราอัปเอง
-
+        // 2. อัปเดต Firestore ทันที (ไม่รอ GAS)
         const updateData = {
-            commandStatus: 'เสร็จสิ้น',
-            commandBookUrl: finalUrl,
-            commandPdfUrl: finalUrl, // เพิ่ม field นี้ด้วย
-            commandDocUrl: gasData.docUrl || '',
+            commandStatus: 'รอตรวจสอบและออกคำสั่งไปราชการ',
+            commandPdfUrl: commandPdfUrl,
+            commandBookUrl: commandPdfUrl,
             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
         };
-
         await db.collection('requests').doc(docId).set(updateData, { merge: true });
-        return { status: 'success', data: updateData };
+
+        // 3. Sync ไป GAS ในพื้นหลัง
+        syncToGASBackground('approveCommand', {
+            ...data,
+            preGeneratedPdfUrl: commandPdfUrl || null
+        }, docId);
+
+        return { status: 'success', data: { ...updateData, pdfUrl: commandPdfUrl, docUrl: commandDocUrl } };
 
     } catch (error) {
         await db.collection('requests').doc(docId).set({
@@ -156,6 +217,61 @@ async function generateCommandHybrid(data) {
         }, { merge: true });
         throw error;
     }
+}
+
+// -----------------------------------------------------------------------
+// 6. MONTHLY BACKUP — ส่งข้อมูลทั้งหมดจาก Firestore ไป GAS Sheets
+// -----------------------------------------------------------------------
+
+/**
+ * สำรองข้อมูลทั้งหมดจาก Firestore ไปยัง Google Sheets ผ่าน GAS
+ * เรียกใช้โดย Admin เดือนละครั้ง
+ * @param {number} yearBE - ปี พ.ศ. ที่ต้องการ backup (default: ปีปัจจุบัน)
+ */
+async function backupFirestoreToSheets(yearBE) {
+    const targetYear = yearBE || (new Date().getFullYear() + 543);
+    const yearAD = targetYear - 543;
+    const yearStart = `${yearAD}-01-01`;
+    const yearEnd = `${yearAD}-12-31`;
+
+    console.log(`📦 Starting backup for year ${targetYear}...`);
+
+    // ดึงข้อมูล Requests ทั้งหมดในปีนั้น
+    const snapshot = await db.collection('requests')
+        .where('docDate', '>=', yearStart)
+        .where('docDate', '<=', yearEnd)
+        .get();
+
+    if (snapshot.empty) {
+        return { status: 'success', message: `ไม่มีข้อมูลในปี ${targetYear}`, count: 0 };
+    }
+
+    const requests = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // แปลง Firestore Timestamp เป็น string
+        if (data.timestamp && data.timestamp.toDate) {
+            data.timestamp = data.timestamp.toDate().toISOString();
+        }
+        if (data.lastUpdated && data.lastUpdated.toDate) {
+            data.lastUpdated = data.lastUpdated.toDate().toISOString();
+        }
+        // ลบ field ที่ไม่จำเป็น
+        delete data.pdfBase64;
+        delete data._source;
+        return data;
+    });
+
+    console.log(`📤 Sending ${requests.length} records to GAS...`);
+
+    // ส่ง batch ไปยัง GAS
+    const result = await apiCall('POST', 'batchSyncFromFirestore', {
+        requests,
+        year: targetYear,
+        syncedAt: new Date().toISOString()
+    });
+
+    console.log('📦 Backup result:', result);
+    return { ...result, count: requests.length };
 }
 
 // blobToBase64 is defined in utils.js (shared utility)
