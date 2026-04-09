@@ -377,9 +377,46 @@ function renderUserRequests(requests) {
         // ปุ่มดำเนินการ (compact สำหรับ table)
         let actionBtns = '';
 
-        // ปุ่มหลัก: นำไฟล์ไปใช้งาน (แสดงเด่นชัดเมื่อแอดมินอัพโหลดไว้)
-        if (adminMemoUrl) {
-            actionBtns += `<a href="${adminMemoUrl}" target="_blank" class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold">📥 นำไฟล์ไปใช้งาน</a>`;
+        // --- รวบรวมไฟล์ที่แอดมินอัพโหลดให้ผู้ใช้ (dedup by URL) ---
+        const _adminFiles = [];
+        const _seenFileUrls = new Set();
+        const _addAdminFile = (url, label, icon) => {
+            if (url && !_seenFileUrls.has(url)) {
+                _seenFileUrls.add(url);
+                _adminFiles.push({ url, label, icon });
+            }
+        };
+        _addAdminFile(adminMemoUrl,        'บันทึกข้อความ',  '📄');
+        _addAdminFile(completedCommandUrl, 'คำสั่งไปราชการ', '📋');
+        _addAdminFile(dispatchBookUrl,     'หนังสือส่ง',     '📦');
+
+        if (_adminFiles.length === 1) {
+            // ไฟล์เดียว → link โดยตรง
+            actionBtns += `<a href="${_adminFiles[0].url}" target="_blank"
+                class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold">
+                ${_adminFiles[0].icon} ${_adminFiles[0].label}</a>`;
+        } else if (_adminFiles.length > 1) {
+            // หลายไฟล์ → dropdown เมนู
+            const _menuId = `fmenu-${safeId.replace(/[^a-z0-9]/gi, '_')}`;
+            const _menuItems = _adminFiles.map(f => `
+                <a href="${f.url}" target="_blank" onclick="closeAllFileMenus(event)"
+                    class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-800 border-b border-gray-100 last:border-0 whitespace-nowrap transition-colors">
+                    <span class="text-base">${f.icon}</span>
+                    <span class="font-medium">${f.label}</span>
+                    <span class="ml-auto text-gray-400 text-xs">↗</span>
+                </a>`).join('');
+            actionBtns += `
+                <div class="relative w-full file-menu-wrapper">
+                    <button onclick="toggleFileMenu('${_menuId}', event)"
+                        class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold flex items-center justify-center gap-1 pr-2">
+                        <span>📥 นำไฟล์ไปใช้งาน</span>
+                        <span class="opacity-70 text-xs">▾</span>
+                    </button>
+                    <div id="${_menuId}" class="file-menu-dropdown hidden absolute right-0 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden" style="top:calc(100% + 4px);min-width:190px;">
+                        <div class="bg-green-600 px-3 py-1.5 text-xs text-white font-bold tracking-wide">เลือกเอกสาร</div>
+                        ${_menuItems}
+                    </div>
+                </div>`;
         }
 
         if (canSend) {
@@ -389,16 +426,11 @@ function renderUserRequests(requests) {
                             :               '📤 ส่ง/อัปเดตบันทึก';
             actionBtns += `<button onclick="openSendMemoFromList('${safeId}')" class="btn btn-xs bg-orange-500 hover:bg-orange-600 text-white ${isUrgent ? 'animate-pulse' : ''} w-full">${btnLabel}</button>`;
         }
-        if (completedMemoUrl) {
+        // ไฟล์ที่ผู้ใช้ส่งมาเอง (แยกออกจากไฟล์แอดมิน)
+        if (completedMemoUrl && !_seenFileUrls.has(completedMemoUrl)) {
             actionBtns += `<a href="${completedMemoUrl}" target="_blank" class="btn btn-xs bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 w-full">📄 บันทึก (ส่ง)</a>`;
-        } else if (draftMemoUrl && !isCompleted) {
+        } else if (draftMemoUrl && !isCompleted && !_seenFileUrls.has(draftMemoUrl)) {
             actionBtns += `<a href="${draftMemoUrl}" target="_blank" class="btn btn-xs bg-teal-100 text-teal-700 border border-teal-200 hover:bg-teal-200 w-full">📄 บันทึก (ร่าง)</a>`;
-        }
-        if (completedCommandUrl) {
-            actionBtns += `<a href="${completedCommandUrl}" target="_blank" class="btn btn-xs bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 w-full">📋 คำสั่ง</a>`;
-        }
-        if (dispatchBookUrl) {
-            actionBtns += `<a href="${dispatchBookUrl}" target="_blank" class="btn btn-xs bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200 w-full">📦 หนังสือส่ง</a>`;
         }
         // ปุ่มสร้างกำหนดการเดินทางพานักเรียน (แสดงเฉพาะกรณีที่ผ่านเงื่อนไข)
         if (typeof isEligibleForTravelSchedule === 'function' && isEligibleForTravelSchedule(req)) {
@@ -3135,4 +3167,31 @@ async function finalizeDocumentSubmission(pdfBlob) {
         document.getElementById('alert-modal').style.display = 'none';
         showAlert('ผิดพลาด', 'บันทึกข้อมูลไม่สำเร็จ: ' + error.message);
     }
+}
+// -----------------------------------------------------------------------
+// File Menu Dropdown — toggle / close helpers
+// -----------------------------------------------------------------------
+
+function toggleFileMenu(menuId, event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById(menuId);
+    if (!menu) return;
+    const isOpen = !menu.classList.contains('hidden');
+    closeAllFileMenus();
+    if (!isOpen) menu.classList.remove('hidden');
+}
+
+function closeAllFileMenus(event) {
+    if (event) event.stopPropagation();
+    document.querySelectorAll('.file-menu-dropdown').forEach(m => m.classList.add('hidden'));
+}
+
+// ปิด dropdown เมื่อคลิกนอกพื้นที่ (add once)
+if (!window._fileMenuOutsideListenerAdded) {
+    window._fileMenuOutsideListenerAdded = true;
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.file-menu-wrapper')) {
+            document.querySelectorAll('.file-menu-dropdown').forEach(m => m.classList.add('hidden'));
+        }
+    });
 }
