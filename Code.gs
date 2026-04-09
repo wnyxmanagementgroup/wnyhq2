@@ -728,17 +728,16 @@ function saveRequestAndGeneratePdf(payload) {
      const data = requestSheet.getDataRange().getValues();
      const idCol = findColumnIndex(headers, "RequestId");
      rowIndex = data.findIndex(row => String(row[idCol]) === String(requestId));
-     // ✅ แก้ไข GAS-BUG-009: ถ้าไม่พบแถวใน Update mode ให้คืนค่า error ทันที (ป้องกันการสร้างแถวซ้ำ)
-     if (rowIndex <= 0) {
-       return { status: "error", message: "ไม่พบรหัสคำขอ " + requestId + " ที่จะอัปเดต (rowIndex not found)" };
+     // ✅ UPSERT: ถ้าพบแถว ให้อ่านข้อมูลเดิม; ถ้าไม่พบ ให้ appendRow ด้านล่าง (background sync จาก Firestore)
+     if (rowIndex > 0) {
+       const creatorCol = findColumnIndex(headers, "CreatedBy");
+       if (creatorCol > -1) createdBy = data[rowIndex][creatorCol];
+
+       // อ่านข้อมูลเดิมเก็บไว้ (Mapping)
+       headers.forEach((h, i) => {
+           currentData[h.toLowerCase().replace(/\s+/g, "")] = data[rowIndex][i];
+       });
      }
-     const creatorCol = findColumnIndex(headers, "CreatedBy");
-     if (creatorCol > -1) createdBy = data[rowIndex][creatorCol];
-     
-     // อ่านข้อมูลเดิมเก็บไว้ (Mapping)
-     headers.forEach((h, i) => {
-         currentData[h.toLowerCase().replace(/\s+/g, "")] = data[rowIndex][i];
-     });
   }
 
   // สร้าง Object ข้อมูลที่จะบันทึก
@@ -775,7 +774,7 @@ function saveRequestAndGeneratePdf(payload) {
     completedcommandurl: payload.completedCommandUrl || currentData.completedcommandurl,
 
     timestamp: new Date(),
-    status: isUpdate ? "แก้ไขแล้ว" : "กำลังดำเนินการ"
+    status: (isUpdate && rowIndex > 0) ? "แก้ไขแล้ว" : "กำลังดำเนินการ"
   };
 
   const finalRowData = headers.map((header) => {
