@@ -10,8 +10,9 @@ async function submitRequestWithHybrid(formData) {
         let preGeneratedUrl = null;
         try {
             console.log("🚀 Attempting Cloud Run PDF Generation...");
-            // สมมติใช้ template_memo.docx สำหรับบันทึกข้อความ
-            const pdfBlob = await generatePdfFromCloudRun('template_memo.docx', formData);
+            // ใช้ generateOfficialPDF แทน generatePdfFromCloudRun ที่ถูกลบออกแล้ว
+            const memoData = { ...formData, doctype: 'memo', btnId: null };
+            const { pdfBlob } = await generateOfficialPDF(memoData);
             
             // [แก้ไข] เปลี่ยนจาก uploadToStorage (Firebase) เป็น uploadGeneratedFile (GAS/Drive)
             console.log("📤 Uploading to Google Drive via GAS...");
@@ -101,7 +102,9 @@ async function generateCommandHybrid(data) {
                     : PDF_ENGINE_CONFIG.TEMPLATES.COMMAND_LARGE;
             }
 
-            const finalPdfBlob = await generatePdfFromCloudRun(templateName, data);
+            // ใช้ generateOfficialPDF แทน generatePdfFromCloudRun ที่ถูกลบออกแล้ว
+            const commandData = { ...data, doctype: 'command', templateType: templateName.replace('template_command_', '').replace('.docx', ''), btnId: null };
+            const { pdfBlob: finalPdfBlob } = await generateOfficialPDF(commandData);
             
             // [แก้ไข] เปลี่ยนจาก uploadToStorage เป็น uploadGeneratedFile (Drive)
             const filename = `command_${docId}_${Date.now()}.pdf`;
@@ -155,16 +158,4 @@ async function generateCommandHybrid(data) {
     }
 }
 
-// Helper Function: แปลง Blob เป็น Base64 (เผื่อในไฟล์นี้ยังไม่มี)
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        const parts = reader.result ? reader.result.split(',') : [];
-        const base64String = parts.length > 1 ? parts[1] : '';
-        resolve(base64String);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
+// blobToBase64 is defined in utils.js (shared utility)

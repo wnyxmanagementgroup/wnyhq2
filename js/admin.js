@@ -2037,17 +2037,7 @@ async function deleteMemoByAdmin(refId, gasId) {
     }
 }
 
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        const base64String = reader.result.split(',')[1]; 
-        resolve(base64String);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
+// blobToBase64 is defined in utils.js (shared utility)
 // --- เพิ่มใน js/admin.js ---
 
 /**

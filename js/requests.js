@@ -2952,8 +2952,10 @@ async function processAndSignDocument(formData, isEdit = false) {
     toggleLoader('submit-button', true); // หมุน Loader ที่ปุ่ม Submit
     try {
         console.log("Generating PDF from Cloud Run...");
-        // ให้ Cloud Run สร้าง PDF ออกมาก่อน
-        const pdfBlob = await generatePdfFromCloudRun('template_memo.docx', formData);
+        // ให้ Cloud Run สร้าง PDF ออกมาก่อน (ใช้ generateOfficialPDF แทน generatePdfFromCloudRun ที่ถูกลบออกแล้ว)
+        formData.doctype = 'memo';
+        formData.btnId = 'submit-button';
+        const { pdfBlob } = await generateOfficialPDF(formData);
         
         // เก็บข้อมูลไว้ใช้ตอนจิ้ม
         requesterStamperState.pdfBlob = pdfBlob;
