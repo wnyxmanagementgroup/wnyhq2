@@ -793,9 +793,9 @@ function saveRequestAndGeneratePdf(payload) {
     "CommandPdfUrlSolo", "CommandDocUrlSolo", 
     "CommandPdfUrlGroupSmall", "CommandDocUrlGroupSmall", 
     "CommandPdfUrlGroupLarge", "CommandDocUrlGroupLarge", 
-    "DispatchBookPdfUrl", // ลิงก์หนังสือส่ง
+    "DispatchBookPdfUrl", "DispatchBookUrl",
     "Province", "StayAt", "DispatchVehicleType", "DispatchVehicleId",
-    "CompletedMemoUrl", "CompletedCommandUrl"
+    "CompletedMemoUrl", "CompletedCommandUrl", "AdminMemoUrl"
   ]);
   const attendeesSheet = ss.getSheetByName("Attendees");
 
@@ -917,6 +917,8 @@ function saveRequestAndGeneratePdf(payload) {
     dispatchvehicleid: payload.dispatchVehicleId || currentData.dispatchvehicleid,
     completedmemourl: payload.completedMemoUrl || currentData.completedmemourl,
     completedcommandurl: payload.completedCommandUrl || currentData.completedcommandurl,
+    adminmemourl: payload.adminMemoUrl || currentData.adminmemourl,
+    dispatchbookurl: payload.dispatchBookUrl || currentData.dispatchbookurl,
 
     timestamp: new Date(),
     status: (isUpdate && rowIndex > 0) ? "แก้ไขแล้ว" : "กำลังดำเนินการ"
@@ -1449,11 +1451,16 @@ function sheetToObject(sheet) {
         if (key === "licenseplate") key = "licensePlate";
         if (key === "headname") key = "headName";
         if (key === "pdfurl") key = "pdfUrl";
-        if (key === "docurl") key = "docUrl"; // Add docUrl mapping
+        if (key === "docurl") key = "docUrl";
         if (key === "commandpdfurl") key = "commandPdfUrl";
         if (key === "commandstatus") key = "commandStatus";
         if (key === "commandpdfurlsolo") key = "commandPdfUrlSolo";
-        if (key === "commanddocurlsolo") key = "commandDocUrlSolo"; // Add docUrl mapping
+        if (key === "commanddocurlsolo") key = "commandDocUrlSolo";
+        // URL ไฟล์ที่สำคัญ — ต้อง map camelCase ให้ตรงกับที่ frontend อ่าน
+        if (key === "completedmemourl")    key = "completedMemoUrl";
+        if (key === "completedcommandurl") key = "completedCommandUrl";
+        if (key === "adminmemourl")        key = "adminMemoUrl";
+        if (key === "dispatchbookurl")     key = "dispatchBookUrl";
         if (key === "commandpdfurlgroupsmall") key = "commandPdfUrlGroupSmall";
         if (key === "commanddocurlgroupsmall") key = "commandDocUrlGroupSmall"; // Add docUrl mapping
         if (key === "commandpdfurlgrouplarge") key = "commandPdfUrlGroupLarge";
