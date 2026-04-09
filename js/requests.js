@@ -335,26 +335,30 @@ function renderUserRequests(requests) {
 
         // ลิงก์ไฟล์
         const completedMemoUrl    = req.completedMemoUrl;
+        const adminMemoUrl        = req.adminMemoUrl;   // ไฟล์ที่แอดมินอัพโหลดให้ผู้ใช้นำไปใช้งาน
         const draftMemoUrl        = req.fileUrl || req.pdfUrl || req.memoPdfUrl;
         const completedCommandUrl = req.completedCommandUrl || req.commandPdfUrl || req.commandBookUrl;
         const dispatchBookUrl     = req.dispatchBookUrl || req.dispatchBookPdfUrl;
 
         // สถานะ
-        const isCompleted = (req.status === 'เสร็จสิ้น' || req.status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน' || completedMemoUrl);
-        const isFixing    = (req.status === 'นำกลับไปแก้ไข' || req.memoStatus === 'นำกลับไปแก้ไข'
-            || (req.wasRejected === true && req.status !== 'เสร็จสิ้น' && req.status !== 'เสร็จสิ้น/รับไฟล์ไปใช้งาน'));
-        const isSubmitted  = req.status === 'Submitted';
-        const isFinalStatus = req.status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน'
+        const hasAdminFile  = !!adminMemoUrl;
+        const isReadyToUse  = req.status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน' || (hasAdminFile && req.status === 'เสร็จสิ้น');
+        const isCompleted   = isReadyToUse || req.status === 'เสร็จสิ้น' || !!completedMemoUrl;
+        const isFixing      = (req.status === 'นำกลับไปแก้ไข' || req.memoStatus === 'นำกลับไปแก้ไข'
+            || (req.wasRejected === true && !isReadyToUse && req.status !== 'เสร็จสิ้น'));
+        const isSubmitted   = req.status === 'Submitted';
+        const isFinalStatus = isReadyToUse
             || req.status === 'ไม่อนุมัติ'
             || req.status === 'ยกเลิก';
         const needsToSend = (draftMemoUrl && !completedMemoUrl && !isSubmitted && !isFinalStatus) || isFixing;
-        // แสดงปุ่มส่งตลอดจนกว่าแอดมินจะเปลี่ยนสถานะเป็น final
         const canSend     = (draftMemoUrl || completedMemoUrl) && !isFinalStatus;
-        const canEdit     = !completedCommandUrl;
+        const canEdit     = !completedCommandUrl && !isReadyToUse;
 
         // Badge สถานะ
         let statusBadge = '';
-        if (completedCommandUrl) {
+        if (isReadyToUse) {
+            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-800 border border-green-300 font-bold">✅ รับไฟล์ได้แล้ว</span>`;
+        } else if (completedCommandUrl) {
             statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 border border-green-200 font-medium">✅ ออกคำสั่งแล้ว</span>`;
         } else if (isFixing) {
             statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 border border-red-200 animate-pulse font-bold">⚠️ ตีกลับ/ต้องแก้ไข</span>`;
@@ -372,6 +376,12 @@ function renderUserRequests(requests) {
 
         // ปุ่มดำเนินการ (compact สำหรับ table)
         let actionBtns = '';
+
+        // ปุ่มหลัก: นำไฟล์ไปใช้งาน (แสดงเด่นชัดเมื่อแอดมินอัพโหลดไว้)
+        if (adminMemoUrl) {
+            actionBtns += `<a href="${adminMemoUrl}" target="_blank" class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold">📥 นำไฟล์ไปใช้งาน</a>`;
+        }
+
         if (canSend) {
             const isUrgent  = needsToSend || isFixing;
             const btnLabel  = isFixing    ? '📤 ส่งใหม่ (ตีกลับ)'
@@ -405,6 +415,7 @@ function renderUserRequests(requests) {
         // สีแถว
         let rowClass = '';
         if (isFixing)           rowClass = 'row-red';
+        else if (isReadyToUse)  rowClass = 'row-green';
         else if (completedCommandUrl) rowClass = 'row-green';
         else if (isCompleted)   rowClass = 'row-blue';
         else if (needsToSend)   rowClass = 'row-orange';

@@ -1644,92 +1644,106 @@ async function handleAdminMemoActionSubmit(e) {
     e.preventDefault();
     const memoId = document.getElementById('admin-memo-id').value;
     const status = document.getElementById('admin-memo-status').value;
-    
-    const completedMemoFile = document.getElementById('admin-completed-memo-file').files[0];
+
+    const completedMemoFile    = document.getElementById('admin-completed-memo-file').files[0];
     const completedCommandFile = document.getElementById('admin-completed-command-file').files[0];
-    const dispatchBookFile = document.getElementById('admin-dispatch-book-file').files[0];
-    
-    let completedMemoFileObject = null; 
-    let completedCommandFileObject = null; 
-    let dispatchBookFileObject = null;
-    
-    if (completedMemoFile) completedMemoFileObject = await fileToObject(completedMemoFile);
-    if (completedCommandFile) completedCommandFileObject = await fileToObject(completedCommandFile);
-    if (dispatchBookFile) dispatchBookFileObject = await fileToObject(dispatchBookFile);
-    
+    const dispatchBookFile     = document.getElementById('admin-dispatch-book-file').files[0];
+
     toggleLoader('admin-memo-submit-button', true);
-    
+
     try {
-        const result = await apiCall('POST', 'updateMemoStatus', { 
-            id: memoId, 
-            status: status, 
-            completedMemoFile: completedMemoFileObject, 
-            completedCommandFile: completedCommandFileObject, 
-            dispatchBookFile: dispatchBookFileObject 
-        });
-        
-        if (result.status === 'success') {
-            const urls = result.data || {};
-            // ★ ใช้ refNumber (เลขที่บันทึกข้อความ) เป็น Firestore key เสมอ
-            //    เพื่อให้ตรงกับ doc ที่ผู้ใช้ส่งมา (keyed by request ID = refNumber)
-            const refNumber  = document.getElementById('admin-memo-refnumber')?.value || memoId;
-            const safeId     = refNumber.replace(/[\/\\:\.]/g, '-');
+        const refNumber = document.getElementById('admin-memo-refnumber')?.value || memoId;
+        const safeId    = refNumber.replace(/[\/\\:\.]/g, '-');
+        const adminUser = getCurrentUser()?.username || 'admin';
 
-            if (typeof db !== 'undefined') {
-                 const updateData = {
-                     status:      status,
-                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                 };
-
-                 // ★ ถ้าตีกลับ: เขียนฟิลด์ครบเพื่อให้ isFixing / onSnapshot ของผู้ใช้ทำงานได้
-                 if (status === 'นำกลับไปแก้ไข') {
-                     const reason = document.getElementById('admin-rejection-reason')?.value?.trim() || 'ไม่ระบุเหตุผล';
-                     updateData.wasRejected      = true;
-                     updateData.docStatus        = 'waiting_admin_review';
-                     updateData.rejectedBy       = getCurrentUser()?.username || 'แอดมิน';
-                     updateData.rejectedAt       = firebase.firestore.FieldValue.serverTimestamp();
-                     updateData.rejectionReason  = reason;
-                 } else if (status === 'เสร็จสิ้น' || status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน') {
-                     // ล้างสถานะตีกลับเมื่อเสร็จสิ้น
-                     updateData.wasRejected = false;
-                 }
-
-                 // ★ ดึง username จาก allMemosCache เพื่อให้ onSnapshot ผู้ใช้ (where username==...) หาเจอได้
-                 const memoInCache = allMemosCache.find(m =>
-                     (m.refNumber || m.id) === refNumber || m.id === memoId
-                 );
-                 if (memoInCache?.submittedBy) updateData.username = memoInCache.submittedBy;
-
-                 // ★ แยกฟิลด์ admin กับ user ออกจากกัน:
-                 // adminMemoUrl     = ไฟล์บันทึกที่แอดมินอัพโหลด/จัดการ (แสดงในปุ่ม "📄 บันทึก")
-                 // completedMemoUrl = ไฟล์ที่ผู้ใช้ส่งมา (แสดงในปุ่ม "📎 ต้นทาง") — ไม่เขียนทับ
-                 if (urls.completedMemoUrl)    updateData.adminMemoUrl        = urls.completedMemoUrl;
-                 if (urls.completedCommandUrl) updateData.completedCommandUrl  = urls.completedCommandUrl;
-                 if (urls.dispatchBookUrl)     updateData.dispatchBookUrl      = urls.dispatchBookUrl;
-
-                 try {
-                    await db.collection('memos').doc(safeId).set(updateData, { merge: true });
-                    await db.collection('requests').doc(safeId).set(updateData, { merge: true }); // ★ doc ID ตรงกับ request
-                 } catch (e) { console.warn("Firestore update error:", e); }
-            }
-
-            if (status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน') { 
-                const memo = allMemosCache.find(m => m.id === memoId); 
-                if (memo && memo.submittedBy) { 
-                    await sendCompletionEmail(memo.refNumber, memo.submittedBy, status); 
-                } 
-            }
-            showAlert('สำเร็จ', 'อัปเดตสถานะและไฟล์เรียบร้อยแล้ว'); 
-            document.getElementById('admin-memo-action-modal').style.display = 'none'; 
-            document.getElementById('admin-memo-action-form').reset(); 
-            await fetchAllMemos();
-        } else { 
-            showAlert('ผิดพลาด', result.message); 
+        // --- อัปโหลดไฟล์ไปยัง Firebase Storage โดยตรง ---
+        const urls = {};
+        if (completedMemoFile) {
+            const ext = completedMemoFile.name.split('.').pop();
+            urls.adminMemoUrl = await uploadFileToStorage(
+                completedMemoFile, adminUser,
+                `memo_admin_${safeId}_${Date.now()}.${ext}`,
+                completedMemoFile.type
+            );
+            console.log('✅ Admin memo file uploaded:', urls.adminMemoUrl);
         }
-    } catch (error) { 
-        showAlert('ผิดพลาด', error.message); 
-    } finally { 
-        toggleLoader('admin-memo-submit-button', false); 
+        if (completedCommandFile) {
+            const ext = completedCommandFile.name.split('.').pop();
+            urls.completedCommandUrl = await uploadFileToStorage(
+                completedCommandFile, adminUser,
+                `command_${safeId}_${Date.now()}.${ext}`,
+                completedCommandFile.type
+            );
+            console.log('✅ Command file uploaded:', urls.completedCommandUrl);
+        }
+        if (dispatchBookFile) {
+            const ext = dispatchBookFile.name.split('.').pop();
+            urls.dispatchBookUrl = await uploadFileToStorage(
+                dispatchBookFile, adminUser,
+                `dispatch_${safeId}_${Date.now()}.${ext}`,
+                dispatchBookFile.type
+            );
+            console.log('✅ Dispatch book uploaded:', urls.dispatchBookUrl);
+        }
+
+        // --- อัปเดต Firestore ---
+        if (typeof db !== 'undefined') {
+            const updateData = {
+                status,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            if (status === 'นำกลับไปแก้ไข') {
+                const reason = document.getElementById('admin-rejection-reason')?.value?.trim() || 'ไม่ระบุเหตุผล';
+                updateData.wasRejected     = true;
+                updateData.docStatus       = 'waiting_admin_review';
+                updateData.rejectedBy      = adminUser;
+                updateData.rejectedAt      = firebase.firestore.FieldValue.serverTimestamp();
+                updateData.rejectionReason = reason;
+            } else if (status === 'เสร็จสิ้น' || status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน') {
+                updateData.wasRejected = false;
+            }
+
+            // adminMemoUrl = ไฟล์ที่แอดมินอัพโหลดให้ผู้ใช้นำไปใช้งาน
+            if (urls.adminMemoUrl)        updateData.adminMemoUrl        = urls.adminMemoUrl;
+            if (urls.completedCommandUrl) updateData.completedCommandUrl = urls.completedCommandUrl;
+            if (urls.dispatchBookUrl)     updateData.dispatchBookUrl     = urls.dispatchBookUrl;
+
+            // ดึง username จาก cache เพื่อให้ onSnapshot ผู้ใช้ (where username==...) หาเจอได้
+            const memoInCache = allMemosCache.find(m =>
+                (m.refNumber || m.id) === refNumber || m.id === memoId
+            );
+            if (memoInCache?.submittedBy) updateData.username = memoInCache.submittedBy;
+
+            try {
+                await db.collection('memos').doc(safeId).set(updateData, { merge: true });
+                await db.collection('requests').doc(safeId).set(updateData, { merge: true });
+            } catch (e) { console.warn('Firestore update error:', e); }
+        }
+
+        // --- Sync ไป GAS Sheets (background — ไม่ block) ---
+        apiCall('POST', 'updateRequest', {
+            requestId: refNumber,
+            status,
+            ...urls
+        }).catch(e => console.warn('GAS sync warn:', e));
+
+        if (status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน') {
+            const memo = allMemosCache.find(m => m.id === memoId);
+            if (memo?.submittedBy) {
+                await sendCompletionEmail(memo.refNumber, memo.submittedBy, status);
+            }
+        }
+
+        showAlert('สำเร็จ', 'อัปเดตสถานะและไฟล์เรียบร้อยแล้ว');
+        document.getElementById('admin-memo-action-modal').style.display = 'none';
+        document.getElementById('admin-memo-action-form').reset();
+        await fetchAllMemos();
+
+    } catch (error) {
+        showAlert('ผิดพลาด', error.message);
+    } finally {
+        toggleLoader('admin-memo-submit-button', false);
     }
 }
 
