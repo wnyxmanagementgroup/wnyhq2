@@ -126,6 +126,9 @@ function doPost(e) {
         break;
 
       case "deleteRequest": result = deleteRequest(payload); break;
+      case "softDeleteRequest": result = softDeleteRequest(payload); break;
+      case "restoreRequest": result = restoreRequest(payload); break;
+      case "getTrashItems": result = getTrashItems(payload); break;
       case "updateRequestStatusCommand": result = updateRequestStatusCommand(payload); break;
 
       // --- Draft Management ---
@@ -637,6 +640,123 @@ function deleteRequestById(requestId) {
   }
   
   deleteOldPdfFiles(requestId);
+}
+
+// ─────────────────────────────────────────────────────────────
+// SOFT DELETE & RESTORE (ถังขยะ 24 ชั่วโมง)
+// ─────────────────────────────────────────────────────────────
+
+function _getOrCreateTrashSheet(ss) {
+  let trashSheet = ss.getSheetByName("Trash");
+  if (!trashSheet) {
+    const requestSheet = ss.getSheetByName("Requests");
+    const reqHeaders = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+    trashSheet = ss.insertSheet("Trash");
+    trashSheet.getRange(1, 1, 1, reqHeaders.length + 2)
+              .setValues([[...reqHeaders, "DeletedAt", "DeletedBy"]]);
+  }
+  return trashSheet;
+}
+
+function softDeleteRequest(payload) {
+  const id = payload.id || payload.requestId;
+  const deletedBy = payload.username || 'unknown';
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const requestSheet = ss.getSheetByName("Requests");
+  const trashSheet = _getOrCreateTrashSheet(ss);
+
+  const reqData = requestSheet.getDataRange().getValues();
+  const headers = reqData[0];
+  const reqIdCol = findColumnIndex(headers, "RequestId");
+  const reqRow = reqData.findIndex((row, i) => i > 0 && String(row[reqIdCol]) === String(id));
+  if (reqRow <= 0) return { status: "error", message: "ไม่พบคำขอ " + id };
+
+  const trashHeaders = trashSheet.getRange(1, 1, 1, trashSheet.getLastColumn()).getValues()[0];
+  const rowData = reqData[reqRow];
+  const trashRow = trashHeaders.map(h => {
+    if (h === "DeletedAt") return new Date();
+    if (h === "DeletedBy") return deletedBy;
+    const idx = headers.indexOf(h);
+    return idx >= 0 ? rowData[idx] : "";
+  });
+  trashSheet.appendRow(trashRow);
+  requestSheet.deleteRow(reqRow + 1);
+  return { status: "success", message: "ย้ายไปถังขยะแล้ว" };
+}
+
+function restoreRequest(payload) {
+  const id = payload.id || payload.requestId;
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const trashSheet = ss.getSheetByName("Trash");
+  const requestSheet = ss.getSheetByName("Requests");
+
+  if (!trashSheet) return { status: "error", message: "ถังขยะว่างเปล่า" };
+
+  const trashData = trashSheet.getDataRange().getValues();
+  if (trashData.length <= 1) return { status: "error", message: "ถังขยะว่างเปล่า" };
+
+  const trashHeaders = trashData[0];
+  const trashIdCol = findColumnIndex(trashHeaders, "RequestId");
+  const trashRow = trashData.findIndex((row, i) => i > 0 && String(row[trashIdCol]) === String(id));
+  if (trashRow <= 0) return { status: "error", message: "ไม่พบข้อมูลในถังขยะ" };
+
+  const deletedAtCol = findColumnIndex(trashHeaders, "DeletedAt");
+  if (deletedAtCol >= 0 && trashData[trashRow][deletedAtCol]) {
+    const hoursSince = (new Date() - new Date(trashData[trashRow][deletedAtCol])) / 3600000;
+    if (hoursSince > 24) return { status: "error", message: "หมดเวลากู้คืน (เกิน 24 ชั่วโมงแล้ว)" };
+  }
+
+  const reqHeaders = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+  const restoredRow = reqHeaders.map(h => {
+    const idx = trashHeaders.indexOf(h);
+    return idx >= 0 ? trashData[trashRow][idx] : "";
+  });
+  requestSheet.appendRow(restoredRow);
+  trashSheet.deleteRow(trashRow + 1);
+  return { status: "success", message: "กู้คืนข้อมูลสำเร็จ" };
+}
+
+function getTrashItems(payload) {
+  const username = payload ? payload.username : null; // null = admin (all items)
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const trashSheet = ss.getSheetByName("Trash");
+  if (!trashSheet) return { status: "success", data: [] };
+
+  const trashData = trashSheet.getDataRange().getValues();
+  if (trashData.length <= 1) return { status: "success", data: [] };
+
+  const headers = trashData[0];
+  const idCol       = findColumnIndex(headers, "RequestId");
+  const nameCol     = findColumnIndex(headers, "RequesterName");
+  const purposeCol  = findColumnIndex(headers, "Purpose");
+  const deletedAtCol = findColumnIndex(headers, "DeletedAt");
+  const deletedByCol = findColumnIndex(headers, "DeletedBy");
+  const now = new Date();
+
+  const items = [];
+  for (let i = 1; i < trashData.length; i++) {
+    const row = trashData[i];
+    const reqId = String(row[idCol] || "");
+    if (!reqId) continue;
+
+    const deletedAt = deletedAtCol >= 0 ? new Date(row[deletedAtCol]) : null;
+    const hoursSince = deletedAt ? (now - deletedAt) / 3600000 : 999;
+    if (hoursSince > 24) continue; // เกิน 24 ชม. ไม่แสดง
+
+    const deletedBy = deletedByCol >= 0 ? String(row[deletedByCol]) : "";
+    if (username && deletedBy !== username) continue; // กรองตาม user
+
+    items.push({
+      id:          reqId,
+      requesterName: nameCol >= 0 ? String(row[nameCol]) : "",
+      purpose:     purposeCol >= 0 ? String(row[purposeCol]) : "",
+      deletedAt:   deletedAt ? deletedAt.toISOString() : "",
+      deletedBy:   deletedBy,
+      hoursLeft:   Math.max(0, 24 - hoursSince).toFixed(1)
+    });
+  }
+
+  return { status: "success", data: items };
 }
 
 function saveRequestAndGeneratePdf(payload) {

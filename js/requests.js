@@ -137,63 +137,157 @@ async function handleRequestAction(e) {
     }
 }
 
-// ลบคำขอ (ลบทั้งใน GAS และ Firebase)
+// ย้ายคำขอไปถังขยะ (soft delete) — กู้คืนได้ภายใน 24 ชม.
 async function handleDeleteRequest(requestId) {
     try {
         const user = getCurrentUser();
-        if (!user) {
-            showAlert('ผิดพลาด', 'กรุณาเข้าสู่ระบบใหม่');
-            return;
-        }
+        if (!user) { showAlert('ผิดพลาด', 'กรุณาเข้าสู่ระบบใหม่'); return; }
 
         const confirmed = await showConfirm(
-            'ยืนยันการลบ', 
-            `คุณแน่ใจหรือไม่ว่าต้องการลบคำขอ ${requestId}? การกระทำนี้ไม่สามารถย้อนกลับได้`
+            'ยืนยันการลบ',
+            `ต้องการลบคำขอ ${requestId}?\n\nข้อมูลจะถูกเก็บในถังขยะ และสามารถกู้คืนได้ภายใน 24 ชั่วโมง`
         );
-
         if (!confirmed) return;
 
-        // 1. ส่งคำสั่งลบไปที่ Google Apps Script (Master Data)
-        const result = await apiCall('POST', 'deleteRequest', {
-            requestId: requestId,
-            username: user.username
-        });
+        const safeId = requestId.replace(/[\/\\:\.]/g, '-');
 
-        if (result.status === 'success') {
-            
-            // 2. ลบข้อมูลใน Firebase (ถ้าเปิดใช้งาน Hybrid)
-            if (typeof db !== 'undefined' && typeof USE_FIREBASE !== 'undefined' && USE_FIREBASE) {
-                try {
-                    // หาเอกสารที่มี requestId ตรงกันแล้วลบ
-                    const query = await db.collection('requests').where('requestId', '==', requestId).get();
-                    if (!query.empty) {
-                        const batch = db.batch();
-                        query.docs.forEach(doc => batch.delete(doc.ref));
-                        await batch.commit();
-                        console.log("✅ Deleted from Firebase:", requestId);
-                    }
-                } catch (fbError) {
-                    console.warn("⚠️ Failed to delete from Firebase:", fbError);
-                }
+        // 1. Firestore: บันทึกลง trash + mark isDeleted ใน requests
+        if (typeof db !== 'undefined') {
+            try {
+                const docSnap = await db.collection('requests').doc(safeId).get();
+                const currentData = docSnap.exists ? docSnap.data() : {};
+                await db.collection('trash').doc(safeId).set({
+                    ...currentData,
+                    id: requestId,
+                    isDeleted: true,
+                    deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    deletedAt_client: new Date().toISOString(),
+                    deletedBy: user.username
+                });
+                await db.collection('requests').doc(safeId).set({ isDeleted: true }, { merge: true });
+            } catch (fbErr) {
+                console.warn('⚠️ Firestore soft-delete failed:', fbErr.message);
             }
+        }
 
-            showAlert('สำเร็จ', 'ลบคำขอเรียบร้อยแล้ว');
-            
-            clearRequestsCache();
-            await fetchUserRequests(); // โหลดข้อมูลใหม่
-            
-            // ถ้าอยู่ในหน้า Edit ให้เด้งกลับ Dashboard
-            if (document.getElementById('edit-page').classList.contains('hidden') === false) {
-                await switchPage('dashboard-page');
-            }
-            
-        } else {
-            showAlert('ผิดพลาด', result.message || 'ไม่สามารถลบคำขอได้');
+        // 2. GAS: ย้ายไป Trash sheet (background, non-blocking)
+        apiCall('POST', 'softDeleteRequest', { requestId, username: user.username }).catch(() => {});
+
+        showAlert('สำเร็จ', `ลบคำขอ ${requestId} แล้ว\nสามารถกู้คืนได้จาก 🗑️ ถังขยะ ภายใน 24 ชั่วโมง`);
+        clearRequestsCache();
+        await fetchUserRequests();
+
+        if (!document.getElementById('edit-page').classList.contains('hidden')) {
+            await switchPage('dashboard-page');
         }
 
     } catch (error) {
         console.error('Error deleting request:', error);
-        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการลบคำขอ: ' + error.message);
+        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + error.message);
+    }
+}
+
+// ─── ถังขยะ: แสดงรายการที่ถูกลบ (เฉพาะภายใน 24 ชม.) ───
+async function showTrashBin() {
+    const modal = document.getElementById('trash-modal');
+    const listEl = document.getElementById('trash-list');
+    if (!modal || !listEl) return;
+
+    modal.classList.remove('hidden');
+    listEl.innerHTML = '<p class="text-center text-gray-400 py-6">กำลังโหลด...</p>';
+
+    const user = getCurrentUser();
+    const isAdmin = user && (user.role === 'admin' || user.isAdmin);
+    const items = [];
+
+    try {
+        // ดึงจาก Firestore trash collection
+        if (typeof db !== 'undefined') {
+            const snap = await db.collection('trash')
+                .where('isDeleted', '==', true)
+                .get();
+            const now = Date.now();
+            snap.forEach(doc => {
+                const d = doc.data();
+                const deletedAt = d.deletedAt_client ? new Date(d.deletedAt_client) :
+                                  (d.deletedAt && d.deletedAt.toDate ? d.deletedAt.toDate() : null);
+                if (!deletedAt) return;
+                const hoursLeft = 24 - (now - deletedAt.getTime()) / 3600000;
+                if (hoursLeft <= 0) return;
+                if (!isAdmin && d.deletedBy !== user.username) return;
+                items.push({ id: d.id || doc.id.replace(/-/g, '/'), requesterName: d.requesterName || '',
+                    purpose: d.purpose || '', deletedBy: d.deletedBy || '',
+                    deletedAt: deletedAt.toLocaleString('th-TH'), hoursLeft: hoursLeft.toFixed(1) });
+            });
+        }
+
+        // Fallback: GAS getTrashItems
+        if (items.length === 0) {
+            const gasRes = await apiCall('GET', 'getTrashItems', isAdmin ? {} : { username: user.username });
+            if (gasRes.status === 'success') {
+                (gasRes.data || []).forEach(item => {
+                    items.push({ ...item, deletedAt: new Date(item.deletedAt).toLocaleString('th-TH') });
+                });
+            }
+        }
+    } catch (err) {
+        console.warn('⚠️ getTrashItems error:', err.message);
+    }
+
+    if (items.length === 0) {
+        listEl.innerHTML = '<p class="text-center text-gray-400 py-8">ไม่มีรายการในถังขยะ</p>';
+        return;
+    }
+
+    listEl.innerHTML = items.map(item => `
+        <div class="flex items-center justify-between border-b py-3 gap-2">
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-sm text-red-700">${item.id}</p>
+                <p class="text-sm text-gray-700 truncate">${item.requesterName} — ${item.purpose || '-'}</p>
+                <p class="text-xs text-gray-400">ลบเมื่อ: ${item.deletedAt}${isAdmin && item.deletedBy ? ` โดย ${item.deletedBy}` : ''}</p>
+            </div>
+            <div class="text-right shrink-0">
+                <p class="text-xs text-orange-500 mb-1">เหลือ ${item.hoursLeft} ชม.</p>
+                <button onclick="restoreRequest('${item.id}')"
+                    class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg">
+                    ↩ กู้คืน
+                </button>
+            </div>
+        </div>`).join('');
+}
+
+function closeTrashBin() {
+    const modal = document.getElementById('trash-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// กู้คืนข้อมูลจากถังขยะ
+async function restoreRequest(requestId) {
+    if (!await showConfirm('กู้คืนข้อมูล', `ยืนยันการกู้คืนคำขอ ${requestId}?`)) return;
+    try {
+        const safeId = requestId.replace(/[\/\\:\.]/g, '-');
+
+        // Firestore: ย้ายจาก trash กลับไป requests
+        if (typeof db !== 'undefined') {
+            const trashSnap = await db.collection('trash').doc(safeId).get();
+            if (trashSnap.exists) {
+                const data = trashSnap.data();
+                const { isDeleted, deletedAt, deletedAt_client, deletedBy, ...restoreData } = data;
+                await db.collection('requests').doc(safeId).set({ ...restoreData, isDeleted: false }, { merge: true });
+                await db.collection('trash').doc(safeId).delete();
+            }
+        }
+
+        // GAS: กู้คืนจาก Trash sheet (background)
+        apiCall('POST', 'restoreRequest', { requestId }).catch(() => {});
+
+        showAlert('สำเร็จ', `กู้คืนคำขอ ${requestId} เรียบร้อยแล้ว`);
+        closeTrashBin();
+        clearRequestsCache();
+        await fetchUserRequests();
+
+    } catch (err) {
+        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + err.message);
     }
 }
 // ==========================================
@@ -254,8 +348,9 @@ async function fetchUserRequests(forceRefresh = false) {
                             return { ...d, _source: 'firestore' };
                         })
                         .filter(req => {
+                            if (req.isDeleted) return false; // ซ่อนรายการที่ถูกลบ
                             // กรองตามปี
-                            if (!req.docDate) return true; // ไม่มีวันที่ ให้ผ่าน
+                            if (!req.docDate) return true;
                             const reqYear = new Date(req.docDate).getFullYear();
                             return reqYear === yearAD;
                         });

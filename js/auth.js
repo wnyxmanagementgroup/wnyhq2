@@ -125,8 +125,12 @@ function initializeUserSession(user) {
     const adminSyncBtn          = document.getElementById('admin-sync-btn');
     const adminBackupBtn        = document.getElementById('admin-backup-btn');
     const adminSectionLabel     = document.getElementById('admin-section-label');
+    const trashBinBtn           = document.getElementById('trash-bin-btn');
 
     const isAdmin = String(user.role).toLowerCase() === 'admin';
+
+    // ถังขยะ: แสดงสำหรับทุกคนที่ล็อกอินแล้ว
+    if (trashBinBtn) trashBinBtn.classList.remove('hidden');
 
     if (isAdmin) {
         if (adminBtnCommand)       adminBtnCommand.classList.remove('hidden');

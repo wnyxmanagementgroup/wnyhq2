@@ -251,6 +251,10 @@
                         <button id="admin-sync-btn" class="btn-sync hidden">🔄 Sync ข้อมูลสู่ Firebase</button>
                         <button id="admin-backup-btn" onclick="adminBackupFirestoreToSheets()" class="btn-sync hidden" style="background:#6366f1;">💾 สำรองข้อมูล → Sheets</button>
                     </div>
+                    <button id="trash-bin-btn" onclick="showTrashBin()" class="btn-sync hidden"
+                        style="background:#dc2626;" title="ถังขยะ — กู้คืนได้ภายใน 24 ชม.">
+                        🗑️ ถังขยะ
+                    </button>
                     <span id="user-fullname" class="topbar-username">...</span>
                     <button id="logout-button" class="btn-logout">ออกจากระบบ</button>
                 </div>
@@ -2168,6 +2172,26 @@
   </div>
 </div>
 <!-- ===== /TRAVEL SCHEDULE MODAL ===== -->
+
+<!-- ===== TRASH BIN MODAL ===== -->
+<div id="trash-modal" class="fixed inset-0 bg-black bg-opacity-50 z-[80] hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
+    <div class="flex items-center justify-between px-6 py-4" style="background:#dc2626;">
+      <div>
+        <h3 class="text-white font-bold text-lg">🗑️ ถังขยะ</h3>
+        <p class="text-red-200 text-xs">กู้คืนข้อมูลได้ภายใน 24 ชั่วโมง นับจากเวลาที่ลบ</p>
+      </div>
+      <button onclick="closeTrashBin()" class="text-white hover:text-red-200 text-2xl leading-none">&times;</button>
+    </div>
+    <div id="trash-list" class="px-6 py-4 max-h-96 overflow-y-auto divide-y divide-gray-100">
+      <p class="text-center text-gray-400 py-8">กำลังโหลด...</p>
+    </div>
+    <div class="px-6 py-3 bg-gray-50 text-right">
+      <button onclick="closeTrashBin()" class="text-sm text-gray-500 hover:text-gray-700">ปิด</button>
+    </div>
+  </div>
+</div>
+<!-- ===== /TRASH BIN MODAL ===== -->
 
 </body>
 </html>

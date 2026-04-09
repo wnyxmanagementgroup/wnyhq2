@@ -137,8 +137,8 @@ async function fetchAllRequestsForCommand() {
             };
         });
 
-        let requests = Object.values(mergedMap);
-        console.log(`✅ Admin merged total ${requests.length} requests`);
+        let requests = Object.values(mergedMap).filter(r => !r.isDeleted);
+        console.log(`✅ Admin merged total ${requests.length} requests (excluded deleted)`);
 
         // 8. เรียงลำดับ (Sort): เลขที่เอกสารมาก -> น้อย (ล่าสุดขึ้นก่อน)
         requests.sort((a, b) => {
@@ -1994,17 +1994,36 @@ function showDualLinkResult(containerId, title, docUrl, pdfUrl) {
 // --- DELETE FUNCTIONS (สำหรับ Admin) ---
 
 async function deleteRequestByAdmin(requestId) {
-    if (!await showConfirm("ยืนยันการลบ", `คุณแน่ใจหรือไม่ที่จะลบคำขอเลขที่ ${requestId}?`)) return;
+    if (!await showConfirm("ยืนยันการลบ", `ต้องการลบคำขอ ${requestId}?\n\nข้อมูลจะถูกเก็บในถังขยะ กู้คืนได้ภายใน 24 ชั่วโมง`)) return;
     toggleLoader('admin-requests-list', true);
     try {
         const safeId = requestId.toString().replace(/[\/\\:\.]/g, '-');
-        if (typeof db !== 'undefined') { try { await db.collection('requests').doc(safeId).delete(); } catch (e) {} }
-        const result = await apiCall('POST', 'deleteRequest', { id: requestId });
-        if (result.status === 'success') {
-            if (typeof clearRequestsCache === 'function') clearRequestsCache();
-            showAlert('สำเร็จ', 'ลบข้อมูลเรียบร้อยแล้ว');
-            await fetchAllRequestsForCommand();
-        } else { throw new Error(result.message); }
+        const adminUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+        const adminUsername = adminUser ? adminUser.username : 'admin';
+
+        // Firestore soft-delete
+        if (typeof db !== 'undefined') {
+            try {
+                const docSnap = await db.collection('requests').doc(safeId).get();
+                const currentData = docSnap.exists ? docSnap.data() : {};
+                await db.collection('trash').doc(safeId).set({
+                    ...currentData,
+                    id: requestId,
+                    isDeleted: true,
+                    deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    deletedAt_client: new Date().toISOString(),
+                    deletedBy: adminUsername
+                });
+                await db.collection('requests').doc(safeId).set({ isDeleted: true }, { merge: true });
+            } catch (e) { console.warn('Firestore soft-delete error:', e); }
+        }
+
+        // GAS soft-delete (background)
+        apiCall('POST', 'softDeleteRequest', { requestId, username: adminUsername }).catch(() => {});
+
+        if (typeof clearRequestsCache === 'function') clearRequestsCache();
+        showAlert('สำเร็จ', `ลบคำขอ ${requestId} แล้ว\nกู้คืนได้จาก 🗑️ ถังขยะ ภายใน 24 ชั่วโมง`);
+        await fetchAllRequestsForCommand();
     } catch (error) {
         showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + error.message);
         await fetchAllRequestsForCommand();
