@@ -55,90 +55,19 @@ async function fetchAllRequestsForCommand() {
         
         console.log(`📥 Fetching admin requests for year: ${selectedYear}`);
 
-        // ── 5. ดึงข้อมูลจาก Firestore และ GAS พร้อมกัน (parallel) แล้ว merge ──
-        const yearAD = selectedYear - 543;
-
-        const [fsResult, gasResult] = await Promise.allSettled([
-            // 5a. Firestore
-            (typeof db !== 'undefined')
-                ? db.collection('requests').get()
-                : Promise.reject(new Error('Firestore not available')),
-            // 5b. GAS Sheets
-            apiCall('GET', 'getAllRequests')
-        ]);
-
-        // ── ประมวลผล GAS (เป็น base) ──
-        const gasMap = {}; // key = req.id
-        if (gasResult.status === 'fulfilled' && gasResult.value.status === 'success') {
-            (gasResult.value.data || []).forEach(req => {
-                if (!req.id) return;
-                const idYear = parseInt(req.id.split('/')[1]) || 0;
-                const dateYear = req.docDate ? new Date(req.docDate).getFullYear() + 543 : 0;
-                if (idYear !== selectedYear && dateYear !== selectedYear) return;
-                let attendees = req.attendees || [];
-                try {
-                    if (typeof attendees === 'string') attendees = JSON.parse(attendees);
-                } catch(e) { attendees = []; }
-                gasMap[req.id] = { ...req, attendees, _source: 'gas' };
-            });
-            console.log(`📋 Admin loaded ${Object.keys(gasMap).length} requests from GAS`);
-        } else {
-            console.warn('⚠️ GAS fetch failed:', gasResult.reason?.message || gasResult.value?.message);
+        // ── 5. ดึงข้อมูลจาก GAS Sheets (source of truth) ──
+        const gasResult = await apiCall('GET', 'getAllRequests');
+        if (gasResult.status !== 'success') {
+            throw new Error(gasResult.message || 'ไม่สามารถดึงข้อมูลจาก Google Sheets ได้');
         }
-
-        // ── ประมวลผล Firestore (deduplicate โดยใช้ id ที่สมบูรณ์ที่สุด) ──
-        const fsMap = {}; // key = req.id
-        if (fsResult.status === 'fulfilled' && !fsResult.value.empty) {
-            fsResult.value.docs.forEach(doc => {
-                const d = doc.data();
-                if (!d.id) return;
-                const idYear = parseInt((d.id.split('/')[1]) || 0);
-                const dateYear = d.docDate ? new Date(d.docDate).getFullYear() + 543 : 0;
-                if (idYear !== selectedYear && dateYear !== selectedYear) return;
-
-                if (d.timestamp && d.timestamp.toDate) d.timestamp = d.timestamp.toDate().toISOString();
-                if (d.lastUpdated && d.lastUpdated.toDate) d.lastUpdated = d.lastUpdated.toDate().toISOString();
-                let attendees = d.attendees || [];
-                try {
-                    if (typeof attendees === 'string') attendees = JSON.parse(attendees);
-                } catch(e) { attendees = []; }
-
-                const candidate = { ...d, attendees };
-                // Deduplicate: เก็บ doc ที่ข้อมูลสมบูรณ์กว่า (มี requesterName)
-                const existing = fsMap[d.id];
-                if (!existing || (!existing.requesterName && candidate.requesterName)) {
-                    fsMap[d.id] = candidate;
-                }
-            });
-            console.log(`⚡ Admin loaded ${Object.keys(fsMap).length} unique requests from Firestore`);
-        } else if (fsResult.status === 'rejected') {
-            console.warn('⚠️ Firestore fetch failed:', fsResult.reason?.message);
-        }
-
-        // ── Merge: รวม GAS + Firestore โดยไม่มีซ้ำ ──
-        // เริ่มจาก GAS เป็น base แล้วให้ Firestore override ค่าที่ไม่ว่าง
-        const mergedMap = { ...gasMap };
-        Object.values(fsMap).forEach(fb => {
-            const gas = mergedMap[fb.id] || {};
-            const fbAttendees = fb.attendees || [];
-            const gasAttendees = gas.attendees || [];
-            mergedMap[fb.id] = {
-                ...gas,
-                ...Object.fromEntries(
-                    Object.entries(fb).filter(([, v]) => v !== null && v !== undefined && v !== '')
-                ),
-                // ฟิลด์พิเศษที่ต้อง merge แยก
-                attendees:       fbAttendees.length > 0 ? fbAttendees : gasAttendees,
-                pdfUrl:          fb.pdfUrl    || fb.fileUrl    || gas.pdfUrl,
-                fileUrl:         fb.fileUrl   || fb.pdfUrl     || gas.fileUrl,
-                commandPdfUrl:   fb.commandPdfUrl  || fb.commandBookUrl  || gas.commandPdfUrl,
-                dispatchBookUrl: fb.dispatchBookUrl || fb.dispatchBookPdfUrl || gas.dispatchBookUrl,
-                _source: 'firestore',
-            };
+        let requests = (gasResult.data || []).filter(req => {
+            if (!req.id && !req.docDate) return false;
+            const idYear = req.id ? parseInt(req.id.split('/')[1]) : 0;
+            if (idYear === selectedYear) return true;
+            if (req.docDate) return new Date(req.docDate).getFullYear() + 543 === selectedYear;
+            return false;
         });
-
-        let requests = Object.values(mergedMap).filter(r => !r.isDeleted);
-        console.log(`✅ Admin merged total ${requests.length} requests (excluded deleted)`);
+        console.log(`📋 Admin loaded ${requests.length} requests from GAS Sheets`);
 
         // 8. เรียงลำดับ (Sort): เลขที่เอกสารมาก -> น้อย (ล่าสุดขึ้นก่อน)
         requests.sort((a, b) => {
@@ -1994,33 +1923,13 @@ function showDualLinkResult(containerId, title, docUrl, pdfUrl) {
 // --- DELETE FUNCTIONS (สำหรับ Admin) ---
 
 async function deleteRequestByAdmin(requestId) {
-    if (!await showConfirm("ยืนยันการลบ", `ต้องการลบคำขอ ${requestId}?\n\nข้อมูลจะถูกเก็บในถังขยะ กู้คืนได้ภายใน 24 ชั่วโมง`)) return;
+    if (!await showConfirm("ยืนยันการลบ", `ต้องการลบคำขอ ${requestId}?\n\nกู้คืนได้ภายใน 24 ชั่วโมง`)) return;
     toggleLoader('admin-requests-list', true);
     try {
-        const safeId = requestId.toString().replace(/[\/\\:\.]/g, '-');
         const adminUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
         const adminUsername = adminUser ? adminUser.username : 'admin';
-
-        // Firestore soft-delete
-        if (typeof db !== 'undefined') {
-            try {
-                const docSnap = await db.collection('requests').doc(safeId).get();
-                const currentData = docSnap.exists ? docSnap.data() : {};
-                await db.collection('trash').doc(safeId).set({
-                    ...currentData,
-                    id: requestId,
-                    isDeleted: true,
-                    deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    deletedAt_client: new Date().toISOString(),
-                    deletedBy: adminUsername
-                });
-                await db.collection('requests').doc(safeId).set({ isDeleted: true }, { merge: true });
-            } catch (e) { console.warn('Firestore soft-delete error:', e); }
-        }
-
-        // GAS soft-delete (background)
-        apiCall('POST', 'softDeleteRequest', { requestId, username: adminUsername }).catch(() => {});
-
+        const result = await apiCall('POST', 'softDeleteRequest', { requestId, username: adminUsername });
+        if (result.status !== 'success') throw new Error(result.message);
         if (typeof clearRequestsCache === 'function') clearRequestsCache();
         showAlert('สำเร็จ', `ลบคำขอ ${requestId} แล้ว\nกู้คืนได้จาก 🗑️ ถังขยะ ภายใน 24 ชั่วโมง`);
         await fetchAllRequestsForCommand();

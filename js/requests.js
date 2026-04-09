@@ -149,29 +149,8 @@ async function handleDeleteRequest(requestId) {
         );
         if (!confirmed) return;
 
-        const safeId = requestId.replace(/[\/\\:\.]/g, '-');
-
-        // 1. Firestore: บันทึกลง trash + mark isDeleted ใน requests
-        if (typeof db !== 'undefined') {
-            try {
-                const docSnap = await db.collection('requests').doc(safeId).get();
-                const currentData = docSnap.exists ? docSnap.data() : {};
-                await db.collection('trash').doc(safeId).set({
-                    ...currentData,
-                    id: requestId,
-                    isDeleted: true,
-                    deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    deletedAt_client: new Date().toISOString(),
-                    deletedBy: user.username
-                });
-                await db.collection('requests').doc(safeId).set({ isDeleted: true }, { merge: true });
-            } catch (fbErr) {
-                console.warn('⚠️ Firestore soft-delete failed:', fbErr.message);
-            }
-        }
-
-        // 2. GAS: ย้ายไป Trash sheet (background, non-blocking)
-        apiCall('POST', 'softDeleteRequest', { requestId, username: user.username }).catch(() => {});
+        const result = await apiCall('POST', 'softDeleteRequest', { requestId, username: user.username });
+        if (result.status !== 'success') throw new Error(result.message || 'ไม่สามารถลบได้');
 
         showAlert('สำเร็จ', `ลบคำขอ ${requestId} แล้ว\nสามารถกู้คืนได้จาก 🗑️ ถังขยะ ภายใน 24 ชั่วโมง`);
         clearRequestsCache();
@@ -180,7 +159,6 @@ async function handleDeleteRequest(requestId) {
         if (!document.getElementById('edit-page').classList.contains('hidden')) {
             await switchPage('dashboard-page');
         }
-
     } catch (error) {
         console.error('Error deleting request:', error);
         showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + error.message);
@@ -198,62 +176,34 @@ async function showTrashBin() {
 
     const user = getCurrentUser();
     const isAdmin = user && (user.role === 'admin' || user.isAdmin);
-    const items = [];
 
     try {
-        // ดึงจาก Firestore trash collection
-        if (typeof db !== 'undefined') {
-            const snap = await db.collection('trash')
-                .where('isDeleted', '==', true)
-                .get();
-            const now = Date.now();
-            snap.forEach(doc => {
-                const d = doc.data();
-                const deletedAt = d.deletedAt_client ? new Date(d.deletedAt_client) :
-                                  (d.deletedAt && d.deletedAt.toDate ? d.deletedAt.toDate() : null);
-                if (!deletedAt) return;
-                const hoursLeft = 24 - (now - deletedAt.getTime()) / 3600000;
-                if (hoursLeft <= 0) return;
-                if (!isAdmin && d.deletedBy !== user.username) return;
-                items.push({ id: d.id || doc.id.replace(/-/g, '/'), requesterName: d.requesterName || '',
-                    purpose: d.purpose || '', deletedBy: d.deletedBy || '',
-                    deletedAt: deletedAt.toLocaleString('th-TH'), hoursLeft: hoursLeft.toFixed(1) });
-            });
-        }
+        const gasRes = await apiCall('GET', 'getTrashItems', isAdmin ? {} : { username: user.username });
+        const items = gasRes.status === 'success' ? (gasRes.data || []) : [];
 
-        // Fallback: GAS getTrashItems
         if (items.length === 0) {
-            const gasRes = await apiCall('GET', 'getTrashItems', isAdmin ? {} : { username: user.username });
-            if (gasRes.status === 'success') {
-                (gasRes.data || []).forEach(item => {
-                    items.push({ ...item, deletedAt: new Date(item.deletedAt).toLocaleString('th-TH') });
-                });
-            }
+            listEl.innerHTML = '<p class="text-center text-gray-400 py-8">ไม่มีรายการในถังขยะ</p>';
+            return;
         }
+
+        listEl.innerHTML = items.map(item => `
+            <div class="flex items-center justify-between border-b py-3 gap-2">
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-sm text-red-700">${item.id}</p>
+                    <p class="text-sm text-gray-700 truncate">${item.requesterName} — ${item.purpose || '-'}</p>
+                    <p class="text-xs text-gray-400">ลบเมื่อ: ${new Date(item.deletedAt).toLocaleString('th-TH')}${isAdmin && item.deletedBy ? ` โดย ${item.deletedBy}` : ''}</p>
+                </div>
+                <div class="text-right shrink-0">
+                    <p class="text-xs text-orange-500 mb-1">เหลือ ${item.hoursLeft} ชม.</p>
+                    <button onclick="restoreRequest('${item.id}')"
+                        class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg">
+                        ↩ กู้คืน
+                    </button>
+                </div>
+            </div>`).join('');
     } catch (err) {
-        console.warn('⚠️ getTrashItems error:', err.message);
+        listEl.innerHTML = `<p class="text-center text-red-400 py-8">โหลดไม่สำเร็จ: ${err.message}</p>`;
     }
-
-    if (items.length === 0) {
-        listEl.innerHTML = '<p class="text-center text-gray-400 py-8">ไม่มีรายการในถังขยะ</p>';
-        return;
-    }
-
-    listEl.innerHTML = items.map(item => `
-        <div class="flex items-center justify-between border-b py-3 gap-2">
-            <div class="flex-1 min-w-0">
-                <p class="font-semibold text-sm text-red-700">${item.id}</p>
-                <p class="text-sm text-gray-700 truncate">${item.requesterName} — ${item.purpose || '-'}</p>
-                <p class="text-xs text-gray-400">ลบเมื่อ: ${item.deletedAt}${isAdmin && item.deletedBy ? ` โดย ${item.deletedBy}` : ''}</p>
-            </div>
-            <div class="text-right shrink-0">
-                <p class="text-xs text-orange-500 mb-1">เหลือ ${item.hoursLeft} ชม.</p>
-                <button onclick="restoreRequest('${item.id}')"
-                    class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg">
-                    ↩ กู้คืน
-                </button>
-            </div>
-        </div>`).join('');
 }
 
 function closeTrashBin() {
@@ -265,27 +215,15 @@ function closeTrashBin() {
 async function restoreRequest(requestId) {
     if (!await showConfirm('กู้คืนข้อมูล', `ยืนยันการกู้คืนคำขอ ${requestId}?`)) return;
     try {
-        const safeId = requestId.replace(/[\/\\:\.]/g, '-');
-
-        // Firestore: ย้ายจาก trash กลับไป requests
-        if (typeof db !== 'undefined') {
-            const trashSnap = await db.collection('trash').doc(safeId).get();
-            if (trashSnap.exists) {
-                const data = trashSnap.data();
-                const { isDeleted, deletedAt, deletedAt_client, deletedBy, ...restoreData } = data;
-                await db.collection('requests').doc(safeId).set({ ...restoreData, isDeleted: false }, { merge: true });
-                await db.collection('trash').doc(safeId).delete();
-            }
+        const result = await apiCall('POST', 'restoreRequest', { requestId });
+        if (result.status !== 'success') {
+            showAlert('ผิดพลาด', result.message || 'ไม่สามารถกู้คืนได้');
+            return;
         }
-
-        // GAS: กู้คืนจาก Trash sheet (background)
-        apiCall('POST', 'restoreRequest', { requestId }).catch(() => {});
-
         showAlert('สำเร็จ', `กู้คืนคำขอ ${requestId} เรียบร้อยแล้ว`);
         closeTrashBin();
         clearRequestsCache();
         await fetchUserRequests();
-
     } catch (err) {
         showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + err.message);
     }
@@ -327,75 +265,13 @@ async function fetchUserRequests(forceRefresh = false) {
     if (noMsg) noMsg.classList.add('hidden');
 
     try {
-        const yearAD = selectedYear - 543;
-
-        // ── ดึง Firestore + GAS พร้อมกัน (parallel) ──
-        const [fsResult, gasResult] = await Promise.allSettled([
-            (typeof db !== 'undefined')
-                ? db.collection('requests').where('username', '==', user.username).get()
-                : Promise.reject(new Error('Firestore not available')),
-            apiCall('GET', 'getRequestsByYear', { year: selectedYear, username: user.username })
-        ]);
-
-        // ── ประมวลผล GAS (เป็น base — มีข้อมูลครบ) ──
-        const gasMap = {};
-        if (gasResult.status === 'fulfilled' && gasResult.value.status === 'success') {
-            (gasResult.value.data || []).forEach(req => {
-                if (!req.id) return;
-                let attendees = req.attendees || [];
-                try { if (typeof attendees === 'string') attendees = JSON.parse(attendees); } catch(e) { attendees = []; }
-                gasMap[req.id] = { ...req, attendees, _source: 'gas' };
-            });
-            console.log(`📋 Loaded ${Object.keys(gasMap).length} requests from GAS`);
-        } else {
-            console.warn('⚠️ GAS fetch failed:', gasResult.reason?.message || gasResult.value?.message);
-        }
-
-        // ── ประมวลผล Firestore (deduplicate ตาม id ที่สมบูรณ์กว่า) ──
-        const fsMap = {};
-        if (fsResult.status === 'fulfilled' && !fsResult.value.empty) {
-            fsResult.value.docs.forEach(doc => {
-                const d = doc.data();
-                if (!d.id) return;
-                if (d.timestamp && d.timestamp.toDate) d.timestamp = d.timestamp.toDate().toISOString();
-                if (d.lastUpdated && d.lastUpdated.toDate) d.lastUpdated = d.lastUpdated.toDate().toISOString();
-                const existing = fsMap[d.id];
-                if (!existing || (!existing.requesterName && d.requesterName)) fsMap[d.id] = { ...d };
-            });
-            console.log(`⚡ Loaded ${Object.keys(fsMap).length} requests from Firestore`);
-        } else if (fsResult.status === 'rejected') {
-            console.warn('⚠️ Firestore fetch failed:', fsResult.reason?.message);
-        }
-
-        // ── Merge: GAS เป็น base, Firestore fill ค่าล่าสุดที่ไม่ว่าง ──
-        const mergedMap = { ...gasMap };
-        Object.values(fsMap).forEach(fb => {
-            const gas = mergedMap[fb.id] || {};
-            mergedMap[fb.id] = {
-                ...gas,
-                ...Object.fromEntries(Object.entries(fb).filter(([, v]) => v !== null && v !== undefined && v !== '')),
-                pdfUrl:          fb.pdfUrl     || fb.fileUrl    || gas.pdfUrl,
-                fileUrl:         fb.fileUrl    || fb.pdfUrl     || gas.fileUrl,
-                memoPdfUrl:      fb.memoPdfUrl || gas.memoPdfUrl,
-                commandPdfUrl:   fb.commandPdfUrl  || fb.commandBookUrl  || gas.commandPdfUrl,
-                dispatchBookUrl: fb.dispatchBookUrl || fb.dispatchBookPdfUrl || gas.dispatchBookUrl,
-                status:          fb.status     || gas.status,
-                commandStatus:   fb.commandStatus  || gas.commandStatus,
-                docStatus:       fb.docStatus  || gas.docStatus || '',
-                _source: 'firestore',
-            };
+        // ── ดึงข้อมูลจาก GAS Sheets (source of truth) ──
+        const result = await apiCall('GET', 'getRequestsByYear', {
+            year: selectedYear,
+            username: user.username
         });
-
-        let requests = Object.values(mergedMap)
-            .filter(r => !r.isDeleted)
-            .filter(r => {
-                const idYear = r.id ? parseInt((r.id.split('/')[1]) || 0) : 0;
-                if (idYear === selectedYear) return true;
-                if (!r.docDate) return false;
-                return new Date(r.docDate).getFullYear() === yearAD;
-            });
-
-        console.log(`✅ User merged total ${requests.length} requests`);
+        let requests = (result.status === 'success') ? (result.data || []) : [];
+        console.log(`📋 Loaded ${requests.length} requests from GAS Sheets`);
 
         // ── 3. เรียงลำดับ (ใหม่ -> เก่า) ──
         if (requests.length > 0) {
@@ -1964,23 +1840,15 @@ async function handleRequestFormSubmit(e) {
         formData.status = 'Pending'; 
         formData.docStatus = targetDocStatus; 
 
-        // --- Step 1: สร้างเลขที่เอกสาร (Firestore Counter — ไม่ต้องรอ GAS) ---
+        // --- Step 1: ขอเลขที่เอกสารจาก GAS (สร้าง record เบื้องต้นใน Sheets) ---
         if (!isEdit) {
             setBtnStatus('กำลังขอเลขที่เอกสาร...');
-            try {
-                // ✅ Firestore-first: สร้าง ID จาก Firestore Atomic Counter
-                realId = await generateRequestId(formData.docDate);
-                console.log("✅ Generated ID (Firestore):", realId);
-            } catch (idErr) {
-                console.warn('⚠️ Firestore ID failed, falling back to GAS:', idErr.message);
-                // Fallback: ขอ ID จาก GAS ถ้า Firestore ล้มเหลว
-                const createPayload = { ...formData, preGeneratedPdfUrl: 'SKIP_GENERATION' };
-                const createResult = await apiCall('POST', 'createRequest', createPayload);
-                if (createResult.status !== 'success') throw new Error(createResult.message || "ไม่สามารถขอเลขที่เอกสารได้");
-                realId = createResult.id || createResult.data?.id;
-                if (!realId) throw new Error("Server ไม่ได้ส่งเลขที่เอกสารกลับมา");
-                console.log("✅ ได้รับเลขที่ (GAS fallback):", realId);
-            }
+            const createPayload = { ...formData, preGeneratedPdfUrl: 'SKIP_GENERATION' };
+            const createResult = await apiCall('POST', 'createRequest', createPayload);
+            if (createResult.status !== 'success') throw new Error(createResult.message || "ไม่สามารถขอเลขที่เอกสารได้");
+            realId = createResult.id || createResult.data?.id;
+            if (!realId) throw new Error("ระบบไม่ส่งเลขที่เอกสารกลับมา");
+            console.log("✅ ได้รับเลขที่เอกสาร (GAS):", realId);
         }
 
         // --- Step 2: สร้าง PDF จาก Cloud Run ---
@@ -2032,43 +1900,20 @@ async function handleRequestFormSubmit(e) {
             }
         }
 
-        // --- Step 4: บันทึกฐานข้อมูล (Firestore-first, GAS async) ---
+        // --- Step 4: อัปเดต URL ไฟล์ PDF ลงใน Google Sheets ---
         setBtnStatus('กำลังปรับปรุงฐานข้อมูล...');
-
-        const updatePayload = {
+        const gasPayload = {
+            ...formData,
             requestId: realId,
-            fileUrl: finalFileUrl,
-            pdfUrl: finalFileUrl,
+            pdfUrl:     finalFileUrl,
+            fileUrl:    finalFileUrl,
             memoPdfUrl: finalFileUrl,
-            pdfStatus: finalFileUrl ? 'ready' : 'pending',
-            status: 'Pending'
         };
-
-        // 4.1 ✅ Firestore ก่อน (primary — ผู้ใช้เห็นข้อมูลทันที)
-        if (typeof db !== 'undefined') {
-            const docId = realId.replace(/[\/\\\:\.]/g, '-');
-            const fsPayload = {
-                ...formData,
-                ...updatePayload,
-                id: realId,
-                syncedToSheets: false,
-                _source: 'firestore',
-                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            };
-            // ลบ field ที่ไม่ควรเก็บใน Firestore
-            delete fsPayload.pdfBase64;
-            delete fsPayload.signatureBase64;
-            delete fsPayload.action;
-            delete fsPayload.btnId;
-            await db.collection('requests').doc(docId).set(fsPayload, { merge: true });
-            console.log('✅ Saved to Firestore:', docId);
-
-            // 4.2 Sync ไป GAS Sheets ในพื้นหลัง (ไม่รอ, ไม่ block)
-            const gasPayload = { ...fsPayload, preGeneratedPdfUrl: finalFileUrl || 'SKIP_GENERATION' };
-            syncToGASBackground(isEdit ? 'updateRequest' : 'saveRequestAndGeneratePdf', gasPayload, docId);
+        const saveResult = await apiCall('POST', 'updateRequest', gasPayload);
+        if (saveResult.status !== 'success') {
+            console.warn('⚠️ GAS updateRequest warning:', saveResult.message);
         } else {
-            // Fallback: ถ้าไม่มี Firestore ให้ใช้ GAS โดยตรง (กรณี Firebase down)
-            await apiCall('POST', 'updateRequest', updatePayload);
+            console.log('✅ Updated GAS Sheets:', realId);
         }
 
         document.getElementById('alert-modal').style.display = 'none';
