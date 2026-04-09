@@ -83,11 +83,8 @@ async function uploadFileToStorage(blob, username, filename, mimeType) {
     const safeFilename = filename || `${safeUsername}_${Date.now()}`;
     const contentType = mimeType || blob.type || 'application/octet-stream';
 
-    // เลือก folder ตาม mime type
-    const folder = contentType.startsWith('image/') ? 'images' :
-                   contentType.includes('pdf')       ? 'pdfs'   : 'files';
-
-    const storageRef = storage.ref(`${folder}/${safeUsername}/${safeFilename}`);
+    // ใช้ path เดียว uploads/ ให้ Storage rules ครอบคลุมได้ง่าย
+    const storageRef = storage.ref(`uploads/${safeUsername}/${safeFilename}`);
     const snapshot = await storageRef.put(blob, {
         contentType,
         customMetadata: { uploadedBy: username || 'system', uploadedAt: new Date().toISOString() }
