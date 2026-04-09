@@ -424,20 +424,10 @@ async function _confirmSarabanUpload() {
         const user   = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
         const safeId = sarabanState.docId.replace(/[\/\\:\.]/g, '-');
 
-        const sarabanBase64 = await blobToBase64(sarabanState.previewBlob);
-
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data:     sarabanBase64,
-            filename: `saraban_${safeId}.pdf`,
-            mimeType: 'application/pdf',
-            username: user?.username || 'saraban',
-        });
-
-        if (!uploadRes || uploadRes.status !== 'success') {
-            throw new Error(uploadRes?.message || 'อัปโหลดไม่สำเร็จ');
-        }
-
-        const newPdfUrl = uploadRes.url;
+        const newPdfUrl = await uploadPdfToStorage(
+            sarabanState.previewBlob, user?.username || 'saraban',
+            `saraban_${safeId}.pdf`
+        );
 
         if (typeof db !== 'undefined') {
             const sarabanUpdate = {
@@ -572,21 +562,11 @@ async function _applySarabanCommandStamps() {
         const user   = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
         const safeId = sarabanState.docId.replace(/[\/\\:\.]/g, '-');
 
-        // แปลงเป็น base64 ก่อน (ใช้ทั้งอัปโหลด Drive และเก็บใน Firestore)
-        const sarabanBase64 = await blobToBase64(modBlob);
-
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data:     sarabanBase64,
-            filename: `saraban_${safeId}.pdf`,
-            mimeType: 'application/pdf',
-            username: user?.username || 'saraban',
-        });
-
-        if (!uploadRes || uploadRes.status !== 'success') {
-            throw new Error(uploadRes?.message || 'อัปโหลดไม่สำเร็จ');
-        }
-
-        const newPdfUrl = uploadRes.url;
+        const sarabanBase64 = await blobToBase64(modBlob); // ยังต้องใช้ใน Firestore ด้านล่าง
+        const newPdfUrl = await uploadPdfToStorage(
+            modBlob, user?.username || 'saraban',
+            `saraban_${safeId}.pdf`
+        );
 
         if (typeof db !== 'undefined') {
             const sarabanUpdate = {

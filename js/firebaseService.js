@@ -58,37 +58,49 @@ async function generateRequestId(docDate) {
 // -----------------------------------------------------------------------
 
 /**
- * อัปโหลด PDF Blob ไปยัง Firebase Storage
+ * อัปโหลดไฟล์ Blob ไปยัง Firebase Storage (Generic)
+ * รองรับ PDF, DOCX, รูปภาพ และไฟล์อื่น ๆ
  * คืนค่า Download URL ที่ใช้งานได้ทันที
  */
-async function uploadPdfToStorage(pdfBlob, username, filename) {
+async function uploadFileToStorage(blob, username, filename, mimeType) {
     if (typeof firebase === 'undefined' || !firebase.storage) {
         throw new Error('Firebase Storage SDK not available');
     }
 
     // Firebase Storage rules require request.auth != null.
-    // App uses GAS-based auth (not Firebase Auth), so sign in anonymously if needed.
+    // App uses GAS-based session auth (not Firebase Auth), so sign in anonymously if needed.
     if (firebase.auth && !firebase.auth().currentUser) {
         try {
             await firebase.auth().signInAnonymously();
             console.log('🔑 Signed in anonymously for Storage access');
         } catch (authErr) {
             console.warn('⚠️ Anonymous sign-in failed:', authErr.message);
-            // Proceed anyway — storage rules may allow unauthenticated writes in dev
         }
     }
 
     const storage = firebase.storage();
     const safeUsername = (username || 'unknown').replace(/[^a-zA-Z0-9ก-๙_-]/g, '_');
-    const safeFilename = filename || `${safeUsername}_${Date.now()}.pdf`;
-    const storageRef = storage.ref(`pdfs/${safeUsername}/${safeFilename}`);
+    const safeFilename = filename || `${safeUsername}_${Date.now()}`;
+    const contentType = mimeType || blob.type || 'application/octet-stream';
 
-    const snapshot = await storageRef.put(pdfBlob, {
-        contentType: 'application/pdf',
+    // เลือก folder ตาม mime type
+    const folder = contentType.startsWith('image/') ? 'images' :
+                   contentType.includes('pdf')       ? 'pdfs'   : 'files';
+
+    const storageRef = storage.ref(`${folder}/${safeUsername}/${safeFilename}`);
+    const snapshot = await storageRef.put(blob, {
+        contentType,
         customMetadata: { uploadedBy: username || 'system', uploadedAt: new Date().toISOString() }
     });
-    const downloadUrl = await snapshot.ref.getDownloadURL();
-    return downloadUrl;
+    return await snapshot.ref.getDownloadURL();
+}
+
+/**
+ * อัปโหลด PDF Blob ไปยัง Firebase Storage
+ * (wrapper ของ uploadFileToStorage สำหรับ PDF โดยเฉพาะ)
+ */
+async function uploadPdfToStorage(pdfBlob, username, filename) {
+    return uploadFileToStorage(pdfBlob, username, filename, 'application/pdf');
 }
 
 // -----------------------------------------------------------------------

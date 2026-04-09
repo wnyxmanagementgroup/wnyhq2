@@ -865,19 +865,12 @@ async function handleSaveAnnouncement(e) {
         // กรณีที่ 1: มีการอัปโหลดไฟล์ใหม่ (ให้ความสำคัญสูงสุด)
         if (fileInput.files.length > 0) {
             const file = fileInput.files[0];
-            const fileObj = await fileToObject(file);
-            
-            const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                data: fileObj.data,
-                filename: `announcement_${Date.now()}.jpg`,
-                mimeType: file.type,
-                username: getCurrentUser().username
-            });
-            
-            if (uploadRes.status === 'success') {
-                // ได้ลิงก์มาแล้ว แปลงเป็น Direct Link ทันที
-                imageUrl = convertToDirectLink(uploadRes.url);
-            }
+            const ext = file.name.split('.').pop() || 'jpg';
+            const url = await uploadFileToStorage(
+                file, getCurrentUser().username,
+                `announcement_${Date.now()}.${ext}`, file.type
+            );
+            if (url) imageUrl = convertToDirectLink(url);
         } 
         // กรณีที่ 2: ไม่ได้อัปไฟล์ใหม่ แต่มีลิงก์ในช่อง URL (ใช้ลิงก์นั้นเลย)
         else if (urlInput.value.trim() !== '') {
@@ -1053,22 +1046,12 @@ async function handleMemoSubmitFromModal(e) {
                 // เรียกฟังก์ชันรวมไฟล์
                 const mergedPdfBlob = await mergeFilesToSinglePDF(filesToMerge);
 
-                // --- อัปโหลดไฟล์ ---
+                // --- อัปโหลดไฟล์ขึ้น Firebase Storage ---
                 btn.innerHTML = '<div class="loader"></div> กำลังอัปโหลด...';
-                
-                const mergedBase64 = await blobToBase64(mergedPdfBlob);
-                
-                const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                    data: mergedBase64,
-                    filename: `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`,
-                    mimeType: 'application/pdf',
-                    username: user.username,
-                    requestId: requestId
-                });
-
-                if (uploadRes.status !== 'success') throw new Error("อัปโหลดไฟล์ไม่สำเร็จ: " + uploadRes.message);
-                
-                finalFileUrlForAdmin = uploadRes.url;
+                finalFileUrlForAdmin = await uploadPdfToStorage(
+                    mergedPdfBlob, user.username,
+                    `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`
+                );
                 
                 // คืนค่าปุ่ม
                 btn.innerHTML = originalBtnText;
@@ -2174,24 +2157,17 @@ async function reUploadSignedDocument(signedBlob) {
         showAlert('กำลังบันทึก', 'กำลังบันทึกเอกสารที่ลงนามแล้ว...', false);
 
         const user = getCurrentUser();
-        const base64 = await blobToBase64(signedBlob);
         const safeId = docId.replace(/[\/\\:\.]/g, '-');
-        const filename = `memo_signed_${safeId}.pdf`;
-
-        const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-            data: base64,
-            filename: filename,
-            mimeType: 'application/pdf',
-            username: user?.username || 'user'
-        });
-
-        if (uploadRes.status !== 'success') throw new Error(uploadRes.message || 'Upload ไม่สำเร็จ');
+        const newUrl = await uploadPdfToStorage(
+            signedBlob, user?.username || 'user',
+            `memo_signed_${safeId}.pdf`
+        );
 
         // อัปเดต Firestore ด้วย URL ใหม่
         if (typeof db !== 'undefined') {
             await db.collection('requests').doc(safeId).set({
-                memoPdfUrl: uploadRes.url,
-                pdfUrl: uploadRes.url,
+                memoPdfUrl: newUrl,
+                pdfUrl: newUrl,
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
         }

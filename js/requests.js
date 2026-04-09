@@ -1154,27 +1154,8 @@ async function generateDocumentFromDraft() {
         const filename = `memo_EDIT_${safeId}_${Date.now()}.pdf`;
         let newFileUrl = '';
 
-        try {
-            // ✅ Firebase Storage ก่อน (ไม่ต้องพึ่ง DriveApp)
-            newFileUrl = await uploadPdfToStorage(finalBlob, formData.username, filename);
-            console.log('✅ Edit PDF uploaded to Firebase Storage:', newFileUrl);
-        } catch (storageErr) {
-            console.warn('⚠️ Storage upload failed, trying GAS Drive:', storageErr.message);
-            try {
-                const finalBase64 = await blobToBase64(finalBlob);
-                const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                    data: finalBase64, filename: filename,
-                    mimeType: 'application/pdf', username: formData.username
-                });
-                if (uploadRes.status === 'success') {
-                    newFileUrl = uploadRes.url;
-                    console.log('✅ Edit PDF uploaded to Drive (fallback):', newFileUrl);
-                }
-            } catch (driveErr) {
-                console.warn('⚠️ Drive upload also failed:', driveErr.message);
-            }
-        }
-        if (!newFileUrl) throw new Error('ไม่สามารถอัปโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+        newFileUrl = await uploadPdfToStorage(finalBlob, formData.username, filename);
+        console.log('✅ Edit PDF uploaded to Firebase Storage:', newFileUrl);
         console.log('✅ Edit PDF URL:', newFileUrl);
 
         // Step 6: บันทึกข้อมูลลง Firestore
@@ -1876,29 +1857,8 @@ async function handleRequestFormSubmit(e) {
         const safeFilename = `memo_${safeIdForFile}_${Date.now()}.pdf`;
         let finalFileUrl = '';
 
-        try {
-            // ✅ อัปโหลดไป Firebase Storage ก่อน (ไม่มี DriveApp error)
-            finalFileUrl = await uploadPdfToStorage(pdfBlob, user.username, safeFilename);
-            console.log('✅ PDF uploaded to Firebase Storage:', finalFileUrl);
-        } catch (storageErr) {
-            console.warn('⚠️ Firebase Storage upload failed, trying GAS Drive:', storageErr.message);
-            // Fallback: ลอง GAS Drive upload (อาจล้มเหลวถ้า DriveApp ยังไม่พร้อม)
-            try {
-                const finalBase64 = await blobToBase64(pdfBlob);
-                const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                    data: finalBase64, filename: safeFilename,
-                    mimeType: 'application/pdf', username: user.username, requestId: realId
-                });
-                if (uploadRes.status === 'success') {
-                    finalFileUrl = uploadRes.url;
-                    console.log('✅ PDF uploaded to Google Drive (fallback):', finalFileUrl);
-                }
-            } catch (driveErr) {
-                console.warn('⚠️ Drive upload also failed, saving without PDF URL:', driveErr.message);
-                // บันทึกข้อมูลต่อไปโดยไม่มี PDF URL (จะ retry ทีหลัง)
-                finalFileUrl = '';
-            }
-        }
+        finalFileUrl = await uploadPdfToStorage(pdfBlob, user.username, safeFilename);
+        console.log('✅ PDF uploaded to Firebase Storage:', finalFileUrl);
 
         // --- Step 4: อัปเดต URL ไฟล์ PDF ลงใน Google Sheets ---
         setBtnStatus('กำลังปรับปรุงฐานข้อมูล...');

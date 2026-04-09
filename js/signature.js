@@ -430,19 +430,10 @@ async function applySignatureToPdf() {
         const docId  = sigState.docId;
         const safeId = docId ? docId.replace(/[\/\\:\.]/g, '-') : 'unknown';
 
-        const base64Data = await blobToBase64(signedBlob);
-        const uploadRes  = await apiCall('POST', 'uploadGeneratedFile', {
-            data:     base64Data,
-            filename: `signed_${safeId}.pdf`,
-            mimeType: 'application/pdf',
-            username: user?.username || 'approver',
-        });
-
-        if (!uploadRes || uploadRes.status !== 'success') {
-            throw new Error(uploadRes?.message || 'อัปโหลดไม่สำเร็จ');
-        }
-
-        const newPdfUrl   = uploadRes.url;
+        const newPdfUrl = await uploadPdfToStorage(
+            signedBlob, user?.username || 'approver',
+            `signed_${safeId}.pdf`
+        );
         const nextStatus  = getNextDocStatus(sigState.currentDocStatus);
 
         // ── 3. อ่าน docType เพื่อแยกการอัพเดตบันทึก vs คำสั่ง ──

@@ -251,24 +251,16 @@ async function handleAdminGenerateCommand() {
         const { pdfBlob, docxBlob } = await generateOfficialPDF(requestData);
         window.open(URL.createObjectURL(pdfBlob), '_blank');
         
-        const pdfBase64 = await blobToBase64(pdfBlob);
-        const docBase64 = await blobToBase64(docxBlob);
-        
-        // อัปโหลดไฟล์ PDF
-        const pdfUpload = await apiCall('POST', 'uploadGeneratedFile', {
-            data: pdfBase64, filename: `คำสั่ง_${requestId.replace(/\//g,'-')}.pdf`,
-            mimeType: 'application/pdf', username: requestData.createdby
-        });
+        const safeRequestId = requestId.replace(/\//g, '-');
+        const pdfUploadUrl = await uploadPdfToStorage(pdfBlob, requestData.createdby, `คำสั่ง_${safeRequestId}.pdf`);
+        const docUploadUrl = docxBlob
+            ? await uploadFileToStorage(docxBlob, requestData.createdby, `คำสั่ง_${safeRequestId}.docx`,
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+            : '';
 
-        // อัปโหลดไฟล์ Word
-        const docUpload = await apiCall('POST', 'uploadGeneratedFile', {
-            data: docBase64, filename: `คำสั่ง_${requestId.replace(/\//g,'-')}.docx`,
-            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', username: requestData.createdby
-        });
-
-        if (pdfUpload.status === 'success') {
-            requestData.preGeneratedPdfUrl = pdfUpload.url;
-            requestData.preGeneratedDocUrl = docUpload.url;
+        if (pdfUploadUrl) {
+            requestData.preGeneratedPdfUrl = pdfUploadUrl;
+            requestData.preGeneratedDocUrl = docUploadUrl || '';
             
             // ส่งข้อมูลไป GAS (เพื่อบันทึกใน Sheet)
             await apiCall('POST', 'approveCommand', requestData);
@@ -297,10 +289,10 @@ async function handleAdminGenerateCommand() {
 
                     // ── fields PDF ──
                     commandStatus:  'รอสารบรรณออกเลขที่',
-                    commandPdfUrl:  pdfUpload.url,
-                    pdfUrl:         pdfUpload.url,
-                    currentPdfUrl:  pdfUpload.url,
-                    memoPdfUrl:     pdfUpload.url,
+                    commandPdfUrl:  pdfUploadUrl,
+                    pdfUrl:         pdfUploadUrl,
+                    currentPdfUrl:  pdfUploadUrl,
+                    memoPdfUrl:     pdfUploadUrl,
 
                     attendees:     attendees,
                     lastUpdated:   firebase.firestore.FieldValue.serverTimestamp()
@@ -724,18 +716,11 @@ async function handleDispatchFormSubmit(e) {
             }
         }
 
-        // --- 4. Upload ไฟล์ขึ้น Cloud ---
-        const pdfBase64 = await blobToBase64(pdfBlob);
-        
-        const uploadResult = await apiCall('POST', 'uploadGeneratedFile', {
-            data: pdfBase64,
-            filename: `หนังสือส่ง_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`,
-            mimeType: 'application/pdf',
-            username: requestData.createdby
-        });
-        
-        if (uploadResult.status !== 'success') throw new Error("Upload failed: " + uploadResult.message);
-        const permanentPdfUrl = uploadResult.url;
+        // --- 4. Upload ไฟล์ขึ้น Firebase Storage ---
+        const permanentPdfUrl = await uploadPdfToStorage(
+            pdfBlob, requestData.createdby,
+            `หนังสือส่ง_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`
+        );
 
         // --- 5. อัปเดตฐานข้อมูล (GAS + Firebase) ---
         
@@ -838,16 +823,10 @@ async function handleAdminGenerateMemo() {
             statusDiv.classList.remove('hidden');
         }
 
-        const pdfBase64 = await blobToBase64(pdfBlob);
-        const uploadResult = await apiCall('POST', 'uploadGeneratedFile', {
-            data: pdfBase64,
-            filename: `บันทึกข้อความ_${requestId.replace(/\//g,'-')}.pdf`,
-            mimeType: 'application/pdf',
-            username: requestData.createdby
-        });
-
-        if (uploadResult.status !== 'success') throw new Error("Upload failed");
-        const permanentPdfUrl = uploadResult.url;
+        const permanentPdfUrl = await uploadPdfToStorage(
+            pdfBlob, requestData.createdby,
+            `บันทึกข้อความ_${requestId.replace(/\//g, '-')}.pdf`
+        );
 
         const safeId = requestId.replace(/[\/\\:\.]/g, '-');
         if (typeof db !== 'undefined') {
@@ -2163,19 +2142,11 @@ async function handleSaveAnnouncement(e) {
         // ถ้ามีการอัปโหลดรูปใหม่
         if (fileInput.files.length > 0) {
             const file = fileInput.files[0];
-            const fileObj = await fileToObject(file);
-            
-            // อัปโหลดไปเก็บที่ Drive (ใช้ API เดิม)
-            const uploadRes = await apiCall('POST', 'uploadGeneratedFile', {
-                data: fileObj.data,
-                filename: `announcement_${Date.now()}.jpg`,
-                mimeType: file.type,
-                username: getCurrentUser().username
-            });
-            
-            if (uploadRes.status === 'success') {
-                imageUrl = uploadRes.url;
-            }
+            const ext = file.name.split('.').pop() || 'jpg';
+            imageUrl = await uploadFileToStorage(
+                file, getCurrentUser().username,
+                `announcement_${Date.now()}.${ext}`, file.type
+            );
         } else {
             // ถ้าไม่ได้อัปใหม่ ให้ใช้รูปเดิม (ดึงจาก src ของ preview)
             const previewImg = document.querySelector('#current-announcement-img-preview img');
