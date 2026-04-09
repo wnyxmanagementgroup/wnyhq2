@@ -464,24 +464,53 @@
                              </button>
                          </div>
                     </form>
-                      <div id="form-result" class="hidden mt-6 p-6 text-center bg-gray-50 rounded-xl border border-gray-200 shadow-inner">
-    <div class="text-5xl mb-2">🎉</div>
-    <h3 id="form-result-title" class="font-bold text-xl text-green-700"></h3>
-    <p id="form-result-message" class="mt-2 text-gray-600 mb-6"></p>
-    
-    <div class="flex justify-center flex-wrap gap-4 mt-4 border-t pt-6 border-gray-300">
-        <a id="btn-print-doc" href="#" target="_blank" class="btn bg-gray-600 text-white hover:bg-gray-700 shadow-md flex items-center gap-2 px-6 py-3">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-            พิมพ์เอกสาร (ยังไม่เซ็น)
+                      <div id="form-result" class="hidden mt-6 p-6 bg-gray-50 rounded-xl border border-gray-200 shadow-inner">
+    <div class="text-center">
+        <div class="text-5xl mb-2">🎉</div>
+        <h3 id="form-result-title" class="font-bold text-xl text-green-700"></h3>
+        <p id="form-result-message" class="mt-2 text-gray-600"></p>
+    </div>
+
+    <!-- Embedded PDF viewer -->
+    <div id="result-pdf-preview" class="hidden mt-4 rounded-lg overflow-hidden border border-gray-300 bg-white" style="height:520px;">
+        <div class="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
+            <span class="text-sm font-medium text-gray-600">📄 ตัวอย่างเอกสาร</span>
+            <a id="btn-open-pdf-tab" href="#" target="_blank" rel="noopener"
+               class="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                ↗ เปิดในแท็บใหม่
+            </a>
+        </div>
+        <iframe id="result-pdf-viewer" src="" width="100%" style="height:475px;border:none;"
+                title="ตัวอย่างเอกสาร PDF"></iframe>
+    </div>
+
+    <!-- No-PDF fallback message -->
+    <div id="result-pdf-pending" class="hidden mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center text-sm text-yellow-700">
+        ⚠️ ยังไม่มีไฟล์ PDF — ระบบจะอัปโหลดให้อัตโนมัติ กลับมาดูได้ในรายการคำขอ
+    </div>
+
+    <div class="flex justify-center flex-wrap gap-4 mt-5 border-t pt-5 border-gray-300">
+        <a id="btn-print-doc" href="#" target="_blank" rel="noopener"
+           class="hidden btn bg-gray-600 text-white hover:bg-gray-700 shadow-md flex items-center gap-2 px-5 py-2.5">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+            </svg>
+            ดาวน์โหลด / พิมพ์
         </a>
-        
-        <button type="button" id="btn-esign-doc" class="btn bg-blue-600 text-white hover:bg-blue-700 shadow-lg flex items-center gap-2 px-6 py-3 transform transition hover:scale-105">
+
+        <button type="button" id="btn-esign-doc"
+                class="btn bg-blue-600 text-white hover:bg-blue-700 shadow-lg flex items-center gap-2 px-5 py-2.5 transform transition hover:scale-105">
             <span class="text-xl">✍️</span>
             ลงลายมือชื่ออิเล็กทรอนิกส์
         </button>
 
-        <button type="button" onclick="goToDashboardFromResult()" class="btn bg-gray-200 text-gray-700 hover:bg-gray-300 flex items-center gap-2 px-6 py-3">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+        <button type="button" onclick="goToDashboardFromResult()"
+                class="btn bg-gray-200 text-gray-700 hover:bg-gray-300 flex items-center gap-2 px-5 py-2.5">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
             กลับหน้าหลัก
         </button>
     </div>

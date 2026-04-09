@@ -2216,13 +2216,25 @@ function showFormResult(title, message, pdfUrl, requestId) {
     document.getElementById('form-result-title').textContent = title;
     document.getElementById('form-result-message').textContent = message;
 
-    // ตั้งค่าปุ่มพิมพ์
-    const btnPrint = document.getElementById('btn-print-doc');
+    const btnPrint   = document.getElementById('btn-print-doc');
+    const pdfPreview = document.getElementById('result-pdf-preview');
+    const pdfViewer  = document.getElementById('result-pdf-viewer');
+    const btnOpenTab = document.getElementById('btn-open-pdf-tab');
+    const pdfPending = document.getElementById('result-pdf-pending');
+
     if (pdfUrl) {
-        btnPrint.href = pdfUrl;
-        btnPrint.classList.remove('hidden');
+        // แสดง embedded viewer
+        if (pdfViewer)  pdfViewer.src  = pdfUrl;
+        if (btnOpenTab) btnOpenTab.href = pdfUrl;
+        if (pdfPreview) pdfPreview.classList.remove('hidden');
+        if (pdfPending) pdfPending.classList.add('hidden');
+
+        // ปุ่มดาวน์โหลด
+        if (btnPrint) { btnPrint.href = pdfUrl; btnPrint.classList.remove('hidden'); }
     } else {
-        btnPrint.classList.add('hidden');
+        if (pdfPreview) pdfPreview.classList.add('hidden');
+        if (pdfPending) pdfPending.classList.remove('hidden');
+        if (btnPrint)   btnPrint.classList.add('hidden');
     }
 
     // เก็บข้อมูลสำหรับใช้กับ btn-esign-doc

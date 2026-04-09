@@ -39,6 +39,9 @@ function doGet(e) {
       case "getAllRequests":
         data = getAllRequests();
         break;
+      case "getMaxRequestSeq":
+        data = getMaxRequestSeq(params.year ? parseInt(params.year) : (new Date().getFullYear() + 543));
+        break;
       case "getAllMemos":
         data = getAllMemos();
         break;
@@ -596,6 +599,28 @@ function getAllRequests() {
 
 function getUserRequests(username) {
   return getAllRequests().filter((req) => req.username === username);
+}
+
+// คืนค่าเลขลำดับสูงสุดในปีนั้นจาก Requests sheet (ใช้ initialize Firestore counter)
+function getMaxRequestSeq(yearBE) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
+  if (!sheet) return { status: "success", maxSeq: 0 };
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { status: "success", maxSeq: 0 };
+  const headers = data[0];
+  const idCol = findColumnIndex(headers, "RequestId");
+  if (idCol < 0) return { status: "success", maxSeq: 0 };
+  let maxSeq = 0;
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][idCol] || "");
+    if (!id) continue;
+    const parts = id.split("/");
+    if (parts.length < 2) continue;
+    if (parseInt(parts[1]) !== yearBE) continue;
+    const seq = parseInt(parts[0].replace(/\D/g, ""));
+    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+  }
+  return { status: "success", maxSeq };
 }
 
 function getAttendeesForRequest(requestId) {

@@ -24,9 +24,25 @@ async function generateRequestId(docDate) {
     const yearBE = date.getFullYear() + 543;
     const counterRef = db.doc(`counters/requests_${yearBE}`);
 
+    // ตรวจว่า counter มีอยู่แล้วหรือยัง
+    // ถ้ายังไม่มี ต้องอ่านเลขสูงสุดจาก GAS Sheets ก่อน เพื่อต่อเลขให้ถูกต้อง
+    let startFrom = 0;
+    const initialSnap = await counterRef.get();
+    if (!initialSnap.exists) {
+        try {
+            const gasRes = await apiCall('GET', 'getMaxRequestSeq', { year: yearBE });
+            if (gasRes.status === 'success' && gasRes.maxSeq > 0) {
+                startFrom = gasRes.maxSeq;
+                console.log(`📊 Counter init from GAS Sheets: maxSeq=${startFrom} (year ${yearBE})`);
+            }
+        } catch (e) {
+            console.warn('⚠️ getMaxRequestSeq failed, starting from 0:', e.message);
+        }
+    }
+
     return await db.runTransaction(async (t) => {
         const counterDoc = await t.get(counterRef);
-        const count = counterDoc.exists ? (counterDoc.data().count || 0) + 1 : 1;
+        const count = counterDoc.exists ? (counterDoc.data().count || 0) + 1 : startFrom + 1;
         t.set(counterRef, {
             count,
             year: yearBE,
