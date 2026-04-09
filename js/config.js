@@ -1,6 +1,6 @@
 // --- CONFIGURATION & UTILITIES ---
 
-// 1. Debug Mode: เปลี่ยนเป็น false เมื่อใช้งานจริง (Production) เพื่อปิด Console Log ทั้งหมด
+// 1. Debug Mode
 const IS_DEBUG = true; 
 
 if (!IS_DEBUG) {
@@ -10,8 +10,46 @@ if (!IS_DEBUG) {
     console.info = function() {};
 }
 
-// URL ของ Google Apps Script Web App
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzP-HCQGbA3Xi2Ms4DXTGy8k17Bv72pFohnJ0txAePjjXybe6pK42mSaYOfTQ5V9Q6mDA/exec";
+// 2. Firebase Configuration (ค่าจริงของคุณ)
+const firebaseConfig = {
+  apiKey: "AIzaSyDy_ucbp_8R_o3O4cZY_TPesbkptUERn2E",
+  authDomain: "wny-hq.firebaseapp.com",
+  projectId: "wny-hq",
+  storageBucket: "wny-hq.firebasestorage.app",
+  messagingSenderId: "1046709727117",
+  appId: "1:1046709727117:web:25570ee363e3a821a397c4"
+};
+// 5. Cloud Run Configuration (PDF Engine)
+const PDF_ENGINE_CONFIG = {
+    BASE_URL: "https://wny-pdf-engine-660310608742.asia-southeast1.run.app/", // URL เดิมของคุณ
+    TIMEOUT: 15000, // เวลาสูงสุดที่รอได้ (15 วินาที)
+    TEMPLATES: {
+        COMMAND_SOLO: 'template_command_solo.docx',
+        COMMAND_SMALL: 'template_command_small.docx',
+        COMMAND_LARGE: 'template_command_large.docx',
+        DISPATCH: 'template_dispatch.docx'
+    }
+};
+// 3. Initialize Firebase & Hybrid Mode
+let db = null; // ตัวแปรฐานข้อมูล Global
+const USE_FIREBASE = true; // เปิดใช้งานระบบ Hybrid
+
+try {
+    if (typeof firebase !== 'undefined') {
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.firestore();
+        console.log("🔥 Firebase Connected: Ready to speed up!");
+    } else {
+        console.error("❌ Firebase SDK not found. Please check index.html");
+    }
+} catch (error) {
+    console.error("❌ Firebase Init Error:", error);
+}
+
+// 4. Google Apps Script URL (Backend เดิม)
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyUHx5gy7SFow_xex1Jt8TorLaWpxIgoYausg9z8QuSfoL8g_1r5on104A2m-PbGIWpA/exec";
 
 // Global State
 let allRequestsCache = [];
@@ -22,9 +60,8 @@ window.requestsChartInstance = null;
 window.statusChartInstance = null;
 let currentPublicWeeklyData = [];
 
-// --- SECURITY UTILITY: SANITIZATION ---
-// ฟังก์ชันป้องกัน XSS: แปลงอักขระพิเศษเป็น HTML entities
-// ใช้ฟังก์ชันนี้ครอบตัวแปร text ที่มาจาก User input หรือ Database เสมอ ก่อนนำไปแสดงผล
+// --- UTILITIES ---
+
 function escapeHtml(text) {
     if (text === null || text === undefined) return '';
     return String(text)
@@ -35,7 +72,6 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-// Map ตำแหน่งพิเศษสำหรับหัวหน้างาน
 let specialPositionMap = {
     'รองผู้อำนวยการกลุ่มบริหารทั่วไป':'นางวชิรินทรา พัฒนกุลเดช',
     'รองผู้อำนวยการกลุ่มบริหารงานบุคคล':'นางปณิชา ภัสสิรากุล',
@@ -55,7 +91,31 @@ let specialPositionMap = {
     'หัวหน้ากลุ่มสาระการเรียนรู้ศิลปะ': 'นางสาวปิยลักษณ์ ขันทา',
     'หัวหน้ากลุ่มสาระการเรียนรู้การงานอาชีพ': 'นายสุชาติ สินทร',
     'หัวหน้างานแนะแนว':'นายเริงศักดิ์ จันทร์นวล',
+    'ผู้อำนวยการโรงเรียน':'',
     '.....................................':'.....................................'
+};
+
+// แมปตำแหน่ง → role code ในระบบ (ใช้กำหนดคิวอนุมัติและสิทธิ์เมนูลงนาม)
+const POSITION_TO_ROLE = {
+    'หัวหน้ากลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี': 'head_science',
+    'รองหัวหน้ากลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี': 'head_science',
+    'หัวหน้ากลุ่มสาระการเรียนรู้คณิตศาสตร์': 'head_math',
+    'หัวหน้ากลุ่มสาระการเรียนรู้ภาษาไทย': 'head_thai',
+    'หัวหน้ากลุ่มสาระการเรียนรู้ภาษาต่างประเทศ': 'head_foreign',
+    'หัวหน้ากลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม': 'head_social',
+    'หัวหน้ากลุ่มสาระการเรียนรู้สุขศึกษาและพลศึกษา': 'head_health',
+    'หัวหน้ากลุ่มสาระการเรียนรู้ศิลปะ': 'head_art',
+    'หัวหน้ากลุ่มสาระการเรียนรู้การงานอาชีพ': 'head_career',
+    'หัวหน้างานแนะแนว': 'head_guidance',
+    'หัวหน้ากลุ่มบริหารทั่วไป': 'head_general',
+    'หัวหน้ากลุ่มบริหารงานบุคคล': 'head_personnel',
+    'หัวหน้ากลุ่มบริหารงบประมาณ': 'head_budget',
+    'หัวหน้ากลุ่มบริหารวิชาการ': 'head_acad',
+    'รองผู้อำนวยการกลุ่มบริหารทั่วไป': 'deputy_general',
+    'รองผู้อำนวยการกลุ่มบริหารงบประมาณ': 'deputy_budget',
+    'รองผู้อำนวยการกลุ่มบริหารวิชาการ': 'deputy_acad',
+    'รองผู้อำนวยการกลุ่มบริหารงานบุคคล': 'deputy_personnel',
+    'ผู้อำนวยการโรงเรียน': 'director',
 };
 
 const statusTranslations = {
@@ -65,11 +125,14 @@ const statusTranslations = {
     'Pending Approval': 'รอการตรวจสอบ',
     'เสร็จสิ้น/รับไฟล์ไปใช้งาน': 'เสร็จสิ้น',
     'เสร็จสิ้น': 'เสร็จสิ้น',
+    'รับไฟล์กลับไปใช้งาน': '✅ รับไฟล์กลับไปใช้งาน',
     'รอเอกสาร (เบิก)': 'รอเอกสาร (เบิก)',
     'นำกลับไปแก้ไข': 'นำกลับไปแก้ไข',
+    'ถูกตีกลับ': '❌ ถูกตีกลับ (รอแก้ไข)',
     'เสร็จสิ้นรอออกคำสั่งไปราชการ': 'เสร็จสิ้นรอออกคำสั่ง',
     'รอตรวจสอบและออกคำสั่งไปราชการ': 'รอตรวจสอบและออกคำสั่ง',
-    'กำลังดำเนินการ': 'กำลังดำเนินการ'
+    'กำลังดำเนินการ': 'กำลังดำเนินการ',
+    'สิ้นสุดกระบวนการ': '🚫 สิ้นสุดกระบวนการ (แอดมิน)'
 };
 
 function translateStatus(status) {
