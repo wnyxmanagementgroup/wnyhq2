@@ -1,7 +1,11 @@
 // --- CONFIGURATION & UTILITIES ---
 
-// 1. Debug Mode
-const IS_DEBUG = true; 
+// 1. Debug Mode — เปิดอัตโนมัติบน localhost, ปิดบน production
+const IS_DEBUG = (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === ''
+);
 
 if (!IS_DEBUG) {
     console.log = function() {};
@@ -49,7 +53,7 @@ try {
 }
 
 // 4. Google Apps Script URL (Backend เดิม)
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyUHx5gy7SFow_xex1Jt8TorLaWpxIgoYausg9z8QuSfoL8g_1r5on104A2m-PbGIWpA/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxHffk5rLHflg669FsZysd8GUPe490NzSvCeRToOra_F3G4TtAfxU2ldVZxcPqsSEZo/exec";
 
 // Global State
 let allRequestsCache = [];

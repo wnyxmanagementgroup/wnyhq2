@@ -194,6 +194,19 @@ async function handleTokenSignFlow(token) {
             throw new Error("ลิงก์หมดอายุแล้ว (เกิน 7 วัน) กรุณาขอลิงก์ใหม่จากผู้ส่ง");
         }
 
+        // แจ้งเตือนถ้าลิงก์ใกล้หมดอายุ (น้อยกว่า 24 ชั่วโมง)
+        if (td.expiresAt) {
+            const msLeft = td.expiresAt.toDate() - new Date();
+            if (msLeft > 0 && msLeft < 24 * 60 * 60 * 1000) {
+                const hoursLeft = Math.max(1, Math.floor(msLeft / (60 * 60 * 1000)));
+                const warningBanner = document.createElement('div');
+                warningBanner.className = 'bg-amber-50 border border-amber-300 text-amber-800 text-sm rounded-xl px-4 py-3 mb-3 flex items-center gap-2';
+                warningBanner.innerHTML = `<span class="text-lg">⏰</span><span>ลิงก์นี้จะหมดอายุใน <strong>${hoursLeft} ชั่วโมง</strong> กรุณาดำเนินการโดยเร็ว</span>`;
+                const infoContainer = document.getElementById('token-info');
+                if (infoContainer) infoContainer.insertAdjacentElement('afterbegin', warningBanner);
+            }
+        }
+
         const reqDoc = await db.collection('requests').doc(td.safeId).get();
         if (!reqDoc.exists) throw new Error("ไม่พบเอกสารในระบบ");
 

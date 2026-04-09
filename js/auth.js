@@ -123,9 +123,14 @@ function initializeUserSession(user) {
     const adminBtnApprovalLinks = document.getElementById('admin-nav-approval-links');
     const adminBtnHeads         = document.getElementById('admin-nav-heads');
     const adminSyncBtn          = document.getElementById('admin-sync-btn');
+    const adminBackupBtn        = document.getElementById('admin-backup-btn');
     const adminSectionLabel     = document.getElementById('admin-section-label');
+    const trashBinBtn           = document.getElementById('trash-bin-btn');
 
     const isAdmin = String(user.role).toLowerCase() === 'admin';
+
+    // ถังขยะ: แสดงสำหรับทุกคนที่ล็อกอินแล้ว
+    if (trashBinBtn) trashBinBtn.classList.remove('hidden');
 
     if (isAdmin) {
         if (adminBtnCommand)       adminBtnCommand.classList.remove('hidden');
@@ -133,6 +138,7 @@ function initializeUserSession(user) {
         if (adminBtnApprovalLinks) adminBtnApprovalLinks.classList.remove('hidden');
         if (adminBtnHeads)         adminBtnHeads.classList.remove('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.remove('hidden');
+        if (adminBackupBtn)        adminBackupBtn.classList.remove('hidden');
         if (adminSectionLabel)     adminSectionLabel.classList.remove('hidden');
     } else {
         if (adminBtnCommand)       adminBtnCommand.classList.add('hidden');
@@ -140,6 +146,7 @@ function initializeUserSession(user) {
         if (adminBtnApprovalLinks) adminBtnApprovalLinks.classList.add('hidden');
         if (adminBtnHeads)         adminBtnHeads.classList.add('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.add('hidden');
+        if (adminBackupBtn)        adminBackupBtn.classList.add('hidden');
         if (adminSectionLabel)     adminSectionLabel.classList.add('hidden');
     }
 
@@ -304,6 +311,11 @@ async function handlePasswordUpdate(e) {
         return;
     }
 
+    if (formData.newPassword.length < 6) {
+        showAlert('ผิดพลาด', 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
+        return;
+    }
+
     toggleLoader('password-submit-button', true);
 
     try {
@@ -335,6 +347,11 @@ function handleRegister(e) {
     }
     const password = document.getElementById('reg-password').value;
     const confirmPassword = document.getElementById('reg-confirm-password').value;
+
+    if (password.length < 6) {
+        showAlert('ผิดพลาด', 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
+        return;
+    }
 
     if (password !== confirmPassword) {
         showAlert('ผิดพลาด', 'รหัสผ่านไม่ตรงกัน');
