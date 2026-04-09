@@ -584,16 +584,46 @@ function deleteDraftById(draftId) {
 
 function getAllRequests() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const requestSheet = ss.getSheetByName("Requests");
+  const requestSheet   = ss.getSheetByName("Requests");
   const attendeesSheet = ss.getSheetByName("Attendees");
-  const requests = sheetToObject(requestSheet);
+  const memosSheet     = ss.getSheetByName("Memos");
+
+  const requests  = sheetToObject(requestSheet);
   const attendees = sheetToObject(attendeesSheet);
+
+  // สร้าง index จาก Memos sheet ตาม refNumber เพื่อ join URL ไฟล์ที่แอดมินอัพโหลด
+  const memoIndex = {};
+  if (memosSheet) {
+    sheetToObject(memosSheet).forEach(memo => {
+      const key = String(memo.refNumber || memo.id || '').trim();
+      if (key) memoIndex[key] = memo;
+    });
+  }
+
   requests.forEach((req) => {
-    const reqId = req.id || req.requestid;
-    const attendeeCount = attendees.filter((a) => String(a.requestid) === String(reqId)).length;
+    const reqId = String(req.id || req.requestid || '').trim();
+
+    // Attendees count
+    const attendeeCount = attendees.filter((a) => String(a.requestid) === reqId).length;
     req.attendeeCount = attendeeCount;
-    req.totalPeople = attendeeCount + 1;
+    req.totalPeople   = attendeeCount + 1;
+
+    // Join URL ไฟล์จาก Memos sheet — เติมเฉพาะ field ที่ยังว่างอยู่ใน Requests sheet
+    // ทำให้ข้อมูลเก่าที่เก็บไว้ใน Memos ไหลมาแสดงในหน้า dashboard ผู้ใช้ด้วย
+    const memo = memoIndex[reqId];
+    if (memo) {
+      // completedMemoUrl / adminMemoUrl — ไฟล์ที่แอดมินอัพโหลดให้ผู้ใช้นำไปใช้
+      if (!req.adminMemoUrl      && memo.completedMemoUrl)    req.adminMemoUrl      = memo.completedMemoUrl;
+      if (!req.completedMemoUrl  && memo.completedMemoUrl)    req.completedMemoUrl  = memo.completedMemoUrl;
+      if (!req.completedCommandUrl && memo.completedCommandUrl) req.completedCommandUrl = memo.completedCommandUrl;
+      if (!req.dispatchBookUrl   && memo.dispatchBookUrl)     req.dispatchBookUrl   = memo.dispatchBookUrl;
+      // status จาก Memos (ถ้า Requests ยังไม่มีค่าหรือยังเป็น default)
+      if (!req.status || req.status === 'กำลังดำเนินการ') {
+        if (memo.status) req.status = memo.status;
+      }
+    }
   });
+
   return requests;
 }
 
