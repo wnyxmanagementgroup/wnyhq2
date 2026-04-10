@@ -2097,6 +2097,120 @@ async function adminBackupFirestoreToSheets() {
     }
 }
 
+// --- YEARLY BACKUP EMAIL ---
+
+async function adminSendYearlyBackupEmail() {
+    if (!checkAdminAccess()) return;
+
+    const yearSelect = document.getElementById('admin-year-select');
+    const currentYear = new Date().getFullYear() + 543;
+    const selectedYear = yearSelect ? parseInt(yearSelect.value) : currentYear;
+
+    // ขอ email ปลายทาง
+    const emailInput = prompt(
+        `ส่ง Email สำรองข้อมูลประจำปี พ.ศ. ${selectedYear}\n\nกรอก Email ที่ต้องการรับข้อมูล:`,
+        getCurrentUser()?.email || ''
+    );
+    if (!emailInput || !emailInput.trim()) return;
+    const email = emailInput.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return showAlert('ผิดพลาด', 'รูปแบบ Email ไม่ถูกต้อง');
+    }
+
+    const confirmed = await showConfirm(
+        'ยืนยันการส่ง Email',
+        `ระบบจะส่งข้อมูลทั้งหมดในปี พ.ศ. ${selectedYear} พร้อม link ดาวน์โหลดไฟล์ทุกรายการ ไปที่\n\n${email}\n\nใช้เวลาสักครู่ กรุณารอ...`
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById('admin-email-backup-btn');
+    const origLabel = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ กำลังส่ง...'; }
+
+    try {
+        showAlert('กำลังดำเนินการ', 'กำลังรวบรวมข้อมูลและส่ง Email... กรุณารอสักครู่', false);
+
+        // 1. ดึงข้อมูลจาก Firestore
+        let requests = [];
+        if (typeof db !== 'undefined') {
+            const yearAD = selectedYear - 543;
+            const snapshot = await db.collection('requests')
+                .where('docDate', '>=', `${yearAD}-01-01`)
+                .where('docDate', '<=', `${yearAD}-12-31`)
+                .get();
+
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                // แปลง Timestamp → string
+                if (d.timestamp?.toDate) d.timestamp = d.timestamp.toDate().toISOString();
+                if (d.lastUpdated?.toDate) d.lastUpdated = d.lastUpdated.toDate().toISOString();
+                // ลบ field ขนาดใหญ่ที่ไม่จำเป็น
+                delete d.pdfBase64;
+                delete d.signatureBase64;
+                requests.push(d);
+            });
+
+            // ถ้า Firestore ไม่มีข้อมูล ลอง filter จาก id ปี
+            if (!requests.length) {
+                const snap2 = await db.collection('requests').get();
+                snap2.forEach(doc => {
+                    const d = doc.data();
+                    if ((d.id || '').includes('/' + selectedYear)) {
+                        delete d.pdfBase64; delete d.signatureBase64;
+                        requests.push(d);
+                    }
+                });
+            }
+        }
+
+        // Fallback: ดึงจาก GAS ถ้า Firestore ไม่มีข้อมูล
+        if (!requests.length) {
+            const gasResult = await apiCall('GET', 'getArchiveRequests', { year: selectedYear });
+            if (gasResult.status === 'success') requests = gasResult.data || [];
+        }
+
+        if (!requests.length) {
+            document.getElementById('alert-modal').style.display = 'none';
+            return showAlert('แจ้งเตือน', `ไม่พบข้อมูลในปี พ.ศ. ${selectedYear}`);
+        }
+
+        // 2. ส่งไป GAS เพื่อสร้างและส่ง Email
+        const result = await apiCall('POST', 'sendYearlyBackupEmail', {
+            year:     selectedYear,
+            email:    email,
+            requests: requests.map(r => ({
+                id:                 r.id             || '',
+                requesterName:      r.requesterName  || r.name || r.username || '',
+                purpose:            r.purpose        || '',
+                location:           r.location       || '',
+                docDate:            r.docDate        || '',
+                startDate:          r.startDate      || '',
+                endDate:            r.endDate        || '',
+                status:             r.status         || '',
+                commandStatus:      r.commandStatus  || '',
+                pdfUrl:             r.pdfUrl         || r.memoPdfUrl || r.currentPdfUrl || '',
+                completedMemoUrl:   r.completedMemoUrl  || '',
+                completedCommandUrl: r.completedCommandUrl || '',
+                adminMemoUrl:       r.adminMemoUrl   || '',
+                dispatchBookUrl:    r.dispatchBookUrl || '',
+            }))
+        });
+
+        document.getElementById('alert-modal').style.display = 'none';
+        if (result.status === 'success') {
+            showAlert('ส่ง Email สำเร็จ', `${result.message}\n\nเปิด archive page เพื่อดูข้อมูลออนไลน์ได้ที่ปุ่ม "📚 คลังข้อมูล"`);
+        } else {
+            throw new Error(result.message || 'ส่ง Email ไม่สำเร็จ');
+        }
+    } catch (error) {
+        document.getElementById('alert-modal').style.display = 'none';
+        console.error('Send backup email error:', error);
+        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + error.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+    }
+}
+
 // --- ANNOUNCEMENT MANAGEMENT ---
 
 async function loadAdminAnnouncementSettings() {

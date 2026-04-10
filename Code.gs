@@ -61,6 +61,11 @@ function doGet(e) {
         data = getRequestsByYear(params.year, params.username);
         break;
 
+      // ★ คลังข้อมูล: ดึงข้อมูลทั้งหมดตามปี (สำหรับ archive page — ไม่ต้อง login)
+      case "getArchiveRequests":
+        data = getArchiveRequests(params.year);
+        break;
+
       // ★★★ เพิ่มส่วนนี้ (สำหรับดึงไฟล์ PDF จาก Google Drive เป็น Base64) ★★★
       case "getPdfBase64": {
         // ✅ แก้ไข GAS-BUG-006: เพิ่ม block braces เพื่อรองรับ const ภายใน switch-case
@@ -160,6 +165,9 @@ function doPost(e) {
         break;
       // --- Firestore → Sheets Batch Sync (monthly backup) ---
       case "batchSyncFromFirestore": result = batchSyncFromFirestore(payload); break;
+
+      // --- Yearly Backup Email ---
+      case "sendYearlyBackupEmail": result = sendYearlyBackupEmail(payload); break;
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -2492,4 +2500,167 @@ function runMonthlyBackupEmail() {
   } catch (error) {
     Logger.log('runMonthlyBackupEmail Error: ' + error.message);
   }
+}
+// ==================================================================
+// === ARCHIVE & YEARLY BACKUP EMAIL ================================
+// ==================================================================
+
+/**
+ * ดึงข้อมูลทั้งหมดในปี (พ.ศ.) จาก Google Sheets สำหรับ archive page
+ * ไม่ต้อง login — ข้อมูลเฉพาะ field ที่จำเป็น (ไม่ส่ง personal data เกิน)
+ */
+function getArchiveRequests(yearParam) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName("Requests");
+  if (!sheet) return [];
+
+  const yearBE = yearParam ? parseInt(yearParam) : (new Date().getFullYear() + 543);
+  const yearAD = yearBE - 543;
+  const yearStr = String(yearBE);
+
+  const rows = sheetToObject(sheet);
+  return rows.filter(r => {
+    // กรองตามปี พ.ศ. จาก id (บค001/2568) หรือ docDate (2025-xx-xx)
+    if (r.id && String(r.id).includes('/' + yearStr)) return true;
+    if (r.docDate && String(r.docDate).startsWith(String(yearAD))) return true;
+    return false;
+  }).map(r => ({
+    id:                r.id             || '',
+    requesterName:     r.requesterName  || r.username || '',
+    purpose:           r.purpose        || '',
+    location:          r.location       || '',
+    docDate:           r.docDate        || '',
+    startDate:         r.startDate      || '',
+    endDate:           r.endDate        || '',
+    status:            r.status         || '',
+    commandStatus:     r.commandStatus  || '',
+    pdfUrl:            r.pdfUrl         || '',
+    completedMemoUrl:  r.completedMemoUrl  || '',
+    completedCommandUrl: r.completedCommandUrl || '',
+    adminMemoUrl:      r.adminMemoUrl   || '',
+    dispatchBookUrl:   r.dispatchBookUrl || '',
+  }));
+}
+
+/**
+ * ส่ง Email สรุปข้อมูลประจำปี พร้อม link ดาวน์โหลดไฟล์ทุกรายการ
+ * รับ payload: { year, email, requests: [...] }
+ */
+function sendYearlyBackupEmail(payload) {
+  const year    = payload.year    || (new Date().getFullYear() + 543);
+  const toEmail = payload.email;
+  const requests = payload.requests || [];
+
+  if (!toEmail) throw new Error('ไม่ระบุ email ปลายทาง');
+  if (!requests.length) return { status: 'success', message: 'ไม่มีข้อมูลในปี ' + year };
+
+  // --- สร้าง CSV attachment ---
+  const csvHeader = 'เลขที่,ชื่อผู้ขอ,วัตถุประสงค์,สถานที่,วันที่,สถานะ,บันทึก (URL),คำสั่ง (URL),หนังสือส่ง (URL)';
+  const csvRows = requests.map(r => [
+    r.id, r.requesterName, r.purpose, r.location, r.docDate,
+    r.status, r.completedMemoUrl || r.adminMemoUrl || r.pdfUrl,
+    r.completedCommandUrl, r.dispatchBookUrl
+  ].map(v => '"' + String(v || '').replace(/"/g, '""') + '"').join(','));
+  const csvContent = '\uFEFF' + csvHeader + '\n' + csvRows.join('\n'); // BOM สำหรับ Excel ภาษาไทย
+  const csvBlob = Utilities.newBlob(csvContent, 'text/csv', 'backup_' + year + '.csv');
+
+  // --- สร้าง HTML email ---
+  const statsTotal    = requests.length;
+  const statsComplete = requests.filter(r => r.status && (r.status.includes('เสร็จสิ้น') || r.status.includes('รับไฟล์'))).length;
+  const statsFiles    = requests.filter(r => r.completedMemoUrl || r.adminMemoUrl || r.completedCommandUrl || r.dispatchBookUrl).length;
+
+  const tableRows = requests.map((r, i) => {
+    const fileLinks = [];
+    if (r.pdfUrl)               fileLinks.push('<a href="' + r.pdfUrl + '" style="color:#2563eb">📄 บันทึก</a>');
+    if (r.completedMemoUrl && r.completedMemoUrl !== r.pdfUrl)
+                                 fileLinks.push('<a href="' + r.completedMemoUrl + '" style="color:#2563eb">📄 บันทึก (ส่ง)</a>');
+    if (r.adminMemoUrl)          fileLinks.push('<a href="' + r.adminMemoUrl + '" style="color:#16a34a">📩 แอดมินส่งให้</a>');
+    if (r.completedCommandUrl)   fileLinks.push('<a href="' + r.completedCommandUrl + '" style="color:#7c3aed">📋 คำสั่ง</a>');
+    if (r.dispatchBookUrl)       fileLinks.push('<a href="' + r.dispatchBookUrl + '" style="color:#b45309">📦 หนังสือส่ง</a>');
+
+    const rowBg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
+    return '<tr style="background:' + rowBg + '">'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap">' + escapeHtmlGAS(r.id) + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' + escapeHtmlGAS(r.requesterName) + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;max-width:220px">' + escapeHtmlGAS(r.purpose) + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap">' + escapeHtmlGAS(r.docDate) + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' + escapeHtmlGAS(r.status) + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;line-height:1.8">'
+      + (fileLinks.length ? fileLinks.join('<br>') : '<span style="color:#94a3b8">ไม่มีไฟล์</span>')
+      + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const archiveUrl = 'https://wnyxmanagementgroup.github.io/wnyhq2/archive/?year=' + year;
+
+  const htmlBody = `
+<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Sarabun,Arial,sans-serif;background:#f1f5f9;margin:0;padding:20px">
+<div style="max-width:860px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden">
+  <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:28px 32px;color:#fff">
+    <h1 style="margin:0;font-size:22px">💾 สำรองข้อมูลไปราชการ ปี พ.ศ. ${year}</h1>
+    <p style="margin:8px 0 0;opacity:.85;font-size:14px">จัดทำโดยระบบบริหารงานบุคคล — ส่งอัตโนมัติเมื่อ Admin กดสำรองข้อมูล</p>
+  </div>
+  <div style="padding:24px 32px">
+    <div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 20px;flex:1;min-width:120px;text-align:center">
+        <div style="font-size:28px;font-weight:700;color:#1d4ed8">${statsTotal}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">รายการทั้งหมด</div>
+      </div>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 20px;flex:1;min-width:120px;text-align:center">
+        <div style="font-size:28px;font-weight:700;color:#16a34a">${statsComplete}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">เสร็จสิ้น</div>
+      </div>
+      <div style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;padding:14px 20px;flex:1;min-width:120px;text-align:center">
+        <div style="font-size:28px;font-weight:700;color:#7c3aed">${statsFiles}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">รายการที่มีไฟล์</div>
+      </div>
+    </div>
+    <p style="margin:0 0 8px;font-size:14px;color:#374151">
+      ไฟล์ CSV แนบมาด้วยในอีเมลนี้ — สามารถเปิดใน Excel หรือ Google Sheets ได้ทันที
+    </p>
+    <p style="margin:0 0 20px;font-size:14px;color:#374151">
+      หรือเปิด <a href="${archiveUrl}" style="color:#2563eb;font-weight:600">หน้าค้นหาคลังข้อมูล ↗</a> เพื่อค้นหาและดาวน์โหลดไฟล์แต่ละรายการ
+    </p>
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap">เลขที่</th>
+            <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">ชื่อ</th>
+            <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">วัตถุประสงค์</th>
+            <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap">วันที่เอกสาร</th>
+            <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">สถานะ</th>
+            <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">ดาวน์โหลดไฟล์</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+  </div>
+  <div style="background:#f8fafc;padding:16px 32px;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0">
+    สร้างโดยระบบบริหารงานบุคคลอัตโนมัติ | ข้อมูล ณ วันที่ ${Utilities.formatDate(new Date(), "Asia/Bangkok", "dd/MM/yyyy HH:mm")} น.
+  </div>
+</div>
+</body></html>`;
+
+  MailApp.sendEmail({
+    to:          toEmail,
+    subject:     '[สำรองข้อมูล] รายการไปราชการประจำปี พ.ศ. ' + year + ' (' + requests.length + ' รายการ)',
+    htmlBody:    htmlBody,
+    attachments: [csvBlob],
+    name:        'ระบบบริหารงานบุคคล',
+  });
+
+  Logger.log('📧 Backup email sent to: ' + toEmail + ' | year: ' + year + ' | count: ' + requests.length);
+  return { status: 'success', message: 'ส่ง Email สำรองข้อมูลปี ' + year + ' จำนวน ' + requests.length + ' รายการเรียบร้อยแล้ว' };
+}
+
+/** escape HTML สำหรับใช้ใน email body */
+function escapeHtmlGAS(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

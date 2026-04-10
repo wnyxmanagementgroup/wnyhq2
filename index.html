@@ -250,6 +250,8 @@
                     <div id="admin-actions">
                         <button id="admin-sync-btn" class="btn-sync hidden">🔄 Sync ข้อมูลสู่ Firebase</button>
                         <button id="admin-backup-btn" onclick="adminBackupFirestoreToSheets()" class="btn-sync hidden" style="background:#6366f1;">💾 สำรองข้อมูล → Sheets</button>
+                        <button id="admin-email-backup-btn" onclick="adminSendYearlyBackupEmail()" class="btn-sync hidden" style="background:#0891b2;" title="ส่ง Email สำรองข้อมูลพร้อม link ดาวน์โหลดทุกไฟล์">📧 ส่ง Email สำรอง</button>
+                        <a id="archive-link-btn" href="archive/" target="_blank" class="btn-sync hidden" style="background:#0f766e;text-decoration:none;display:none;">📚 คลังข้อมูล</a>
                     </div>
                     <button id="trash-bin-btn" onclick="showTrashBin()" class="btn-sync hidden"
                         style="background:#dc2626;" title="ถังขยะ — กู้คืนได้ภายใน 24 ชม.">
