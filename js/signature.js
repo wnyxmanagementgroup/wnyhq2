@@ -474,9 +474,16 @@ async function applySignatureToPdf() {
                     update.completedMemoUrl = newPdfUrl;
                 }
                 console.log(`✅ ${isCommandDoc ? 'Command' : 'Memo'} fully approved — file URL returned to user`);
-            } else if (typeof base64Data === 'string' && base64Data.length > 0 && base64Data.length <= 900_000) {
-                // 📦 อัปเดต PDF ที่มีลายเซ็นใหม่เพื่อให้ขั้นตอนถัดไปโหลดได้เร็ว
-                update.pdfBase64 = base64Data;
+            } else {
+                // 📦 ขั้นตอนกลาง: cache PDF ที่มีลายเซ็นแล้วเพื่อให้ผู้ลงนามคนถัดไปโหลดได้เร็ว
+                try {
+                    const base64Data = btoa(
+                        finalBytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '')
+                    );
+                    if (base64Data.length <= 900_000) {
+                        update.pdfBase64 = base64Data;
+                    }
+                } catch (_) { /* ถ้า convert ไม่ได้ก็ไม่ cache — ยังทำงานได้จาก Storage */ }
             }
 
             await db.collection('requests').doc(safeId).set(update, { merge: true });

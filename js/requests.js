@@ -3079,7 +3079,9 @@ async function stampAndSave(x, y) {
         const page = pdfDoc.getPages()[0]; // หน้าแรก
 
         // ใช้ภาพ full canvas (square 500×500) โดยตรง — square→square ไม่บิดเบือน
-        const base64Data = requesterStamperState.signatureBase64.split(',')[1];
+        const _sigRaw = requesterStamperState.signatureBase64 || '';
+        const base64Data = _sigRaw.includes(',') ? _sigRaw.split(',')[1] : _sigRaw;
+        if (!base64Data) throw new Error('ไม่พบข้อมูลลายเซ็น กรุณาวาดลายเซ็นใหม่');
         const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         const signatureImage = await pdfDoc.embedPng(imageBytes);
         const sigWidth  = 500;

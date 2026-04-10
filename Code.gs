@@ -825,7 +825,8 @@ function saveRequestAndGeneratePdf(payload) {
     "CommandPdfUrlGroupLarge", "CommandDocUrlGroupLarge", 
     "DispatchBookPdfUrl", "DispatchBookUrl",
     "Province", "StayAt", "DispatchVehicleType", "DispatchVehicleId",
-    "CompletedMemoUrl", "CompletedCommandUrl", "AdminMemoUrl"
+    "CompletedMemoUrl", "CompletedCommandUrl", "AdminMemoUrl",
+    "DocStatus", "WasRejected", "RejectionReason"
   ]);
   const attendeesSheet = ss.getSheetByName("Attendees");
 
@@ -1491,6 +1492,9 @@ function sheetToObject(sheet) {
         if (key === "completedcommandurl") key = "completedCommandUrl";
         if (key === "adminmemourl")        key = "adminMemoUrl";
         if (key === "dispatchbookurl")     key = "dispatchBookUrl";
+        if (key === "docstatus")           key = "docStatus";
+        if (key === "wasrejected")         key = "wasRejected";
+        if (key === "rejectionreason")     key = "rejectionReason";
         if (key === "commandpdfurlgroupsmall") key = "commandPdfUrlGroupSmall";
         if (key === "commanddocurlgroupsmall") key = "commandDocUrlGroupSmall"; // Add docUrl mapping
         if (key === "commandpdfurlgrouplarge") key = "commandPdfUrlGroupLarge";
@@ -2253,16 +2257,20 @@ function updateRequest(payload) {
       if (docUrlValue) setVal("DocUrl", docUrlValue);
   }
   // C. จัดการลิงก์เฉพาะเจาะจง
-  if (payload.completedMemoUrl) setVal("CompletedMemoUrl", payload.completedMemoUrl);
+  if (payload.completedMemoUrl)    setVal("CompletedMemoUrl", payload.completedMemoUrl);
   if (payload.completedCommandUrl) setVal("CompletedCommandUrl", payload.completedCommandUrl);
-  
+  if (payload.adminMemoUrl)        setVal("AdminMemoUrl", payload.adminMemoUrl);
+
   // หนังสือส่ง (รองรับทั้ง key: dispatchBookPdfUrl และ dispatchBookUrl)
   if (payload.dispatchBookPdfUrl) setVal("DispatchBookPdfUrl", payload.dispatchBookPdfUrl);
-  if (payload.dispatchBookUrl) setVal("DispatchBookPdfUrl", payload.dispatchBookUrl);
+  if (payload.dispatchBookUrl)    setVal("DispatchBookUrl", payload.dispatchBookUrl);
 
   // D. อัปเดตสถานะ (ถ้ามี)
-  if (payload.status) setVal("Status", payload.status);
+  if (payload.status)        setVal("Status", payload.status);
   if (payload.commandStatus) setVal("CommandStatus", payload.commandStatus);
+  if (payload.docStatus)     setVal("DocStatus", payload.docStatus);
+  if (payload.wasRejected !== undefined) setVal("WasRejected", payload.wasRejected);
+  if (payload.rejectionReason) setVal("RejectionReason", payload.rejectionReason);
 
   // E. อัปเดต Timestamp การแก้ไข
   setVal("Timestamp", new Date());

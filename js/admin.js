@@ -1715,10 +1715,8 @@ async function handleAdminMemoActionSubmit(e) {
             );
             if (memoInCache?.submittedBy) updateData.username = memoInCache.submittedBy;
 
-            try {
-                await db.collection('memos').doc(safeId).set(updateData, { merge: true });
-                await db.collection('requests').doc(safeId).set(updateData, { merge: true });
-            } catch (e) { console.warn('Firestore update error:', e); }
+            await db.collection('memos').doc(safeId).set(updateData, { merge: true });
+            await db.collection('requests').doc(safeId).set(updateData, { merge: true });
         }
 
         // --- Sync ไป GAS Sheets (background — ไม่ block) ---
