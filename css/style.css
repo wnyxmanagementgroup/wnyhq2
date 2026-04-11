@@ -146,9 +146,11 @@ legend {
 .admin-tab.tab-announce  { background-color: #4f46e5; color: white; }
 
 /* ── Data Table ──────────────────────────────────────────────── */
-.data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; table-layout: auto; }
 .data-table th { padding: 0.65rem 0.875rem; text-align: left; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; border-bottom: 2px solid #e5e7eb; }
 .data-table td { padding: 0.65rem 0.875rem; vertical-align: middle; }
+.data-table th:last-child,
+.data-table td:last-child { min-width: 160px; }
 .data-table tbody tr { border-bottom: 1px solid #f3f4f6; transition: background-color 0.15s; }
 .data-table tbody tr:hover { background-color: #f9fafb; }
 .data-table tbody tr:last-child { border-bottom: none; }
@@ -156,7 +158,8 @@ legend {
 .data-table .row-orange { background-color: rgba(255, 237, 213, 0.4); }
 .data-table .row-red    { background-color: rgba(254, 226, 226, 0.5); }
 .data-table .row-blue   { background-color: rgba(219, 234, 254, 0.3); }
-.table-wrapper { overflow-x: auto; border-radius: 0.875rem; border: 1px solid #e5e7eb; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+.table-wrapper { overflow-x: auto; border-radius: 0.875rem; border: 1px solid #e5e7eb; box-shadow: 0 1px 4px rgba(0,0,0,0.05); width: 100%; }
+.file-menu-dropdown { position: fixed; z-index: 9999; min-width: 190px; background: #fff; border: 1px solid #d1fae5; border-radius: 0.75rem; box-shadow: 0 10px 30px rgba(0,0,0,0.15); overflow: hidden; }
 
 /* --- Charts & Lists --- */
 /* --- Charts & Lists (ปรับปรุงใหม่) --- */

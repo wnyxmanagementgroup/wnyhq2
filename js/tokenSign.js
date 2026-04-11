@@ -537,7 +537,11 @@ async function loadApprovalLinkManagement() {
 
     } catch (e) {
         console.error("loadApprovalLinkManagement error:", e);
-        container.innerHTML = `<p class="text-center text-red-500 py-8">⚠️ เกิดข้อผิดพลาด: ${e.message}</p>`;
+        const errP = document.createElement('p');
+        errP.className = 'text-center text-red-500 py-8';
+        errP.textContent = '⚠️ เกิดข้อผิดพลาด: ' + e.message;
+        container.innerHTML = '';
+        container.appendChild(errP);
     }
 }
 

@@ -124,6 +124,8 @@ function initializeUserSession(user) {
     const adminBtnHeads         = document.getElementById('admin-nav-heads');
     const adminSyncBtn          = document.getElementById('admin-sync-btn');
     const adminBackupBtn        = document.getElementById('admin-backup-btn');
+    const adminEmailBackupBtn   = document.getElementById('admin-email-backup-btn');
+    const archiveLinkBtn        = document.getElementById('archive-link-btn');
     const adminSectionLabel     = document.getElementById('admin-section-label');
     const trashBinBtn           = document.getElementById('trash-bin-btn');
 
@@ -139,6 +141,8 @@ function initializeUserSession(user) {
         if (adminBtnHeads)         adminBtnHeads.classList.remove('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.remove('hidden');
         if (adminBackupBtn)        adminBackupBtn.classList.remove('hidden');
+        if (adminEmailBackupBtn)   { adminEmailBackupBtn.classList.remove('hidden'); adminEmailBackupBtn.style.display = ''; }
+        if (archiveLinkBtn)        { archiveLinkBtn.classList.remove('hidden'); archiveLinkBtn.style.display = ''; }
         if (adminSectionLabel)     adminSectionLabel.classList.remove('hidden');
     } else {
         if (adminBtnCommand)       adminBtnCommand.classList.add('hidden');
@@ -147,6 +151,8 @@ function initializeUserSession(user) {
         if (adminBtnHeads)         adminBtnHeads.classList.add('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.add('hidden');
         if (adminBackupBtn)        adminBackupBtn.classList.add('hidden');
+        if (adminEmailBackupBtn)   { adminEmailBackupBtn.classList.add('hidden'); adminEmailBackupBtn.style.display = 'none'; }
+        if (archiveLinkBtn)        { archiveLinkBtn.classList.add('hidden'); archiveLinkBtn.style.display = 'none'; }
         if (adminSectionLabel)     adminSectionLabel.classList.add('hidden');
     }
 
