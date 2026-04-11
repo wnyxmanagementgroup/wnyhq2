@@ -2265,6 +2265,19 @@ function updateRequest(payload) {
       if (docUrlValue) setVal("DocUrl", docUrlValue);
   }
   // C. จัดการลิงก์เฉพาะเจาะจง
+  // ตรวจสอบให้แน่ใจว่าคอลัมน์ URL มีอยู่ก่อนเขียน (สำหรับแถวเก่าที่ไม่มีคอลัมน์เหล่านี้)
+  const urlCols = [];
+  if (payload.completedMemoUrl)    urlCols.push("CompletedMemoUrl");
+  if (payload.completedCommandUrl) urlCols.push("CompletedCommandUrl");
+  if (payload.adminMemoUrl)        urlCols.push("AdminMemoUrl");
+  if (payload.dispatchBookUrl)     urlCols.push("DispatchBookUrl");
+  if (payload.dispatchBookPdfUrl)  urlCols.push("DispatchBookPdfUrl");
+  if (urlCols.length) {
+    ensureSheetColumns(sheet, urlCols);
+    // โหลด headerMap ใหม่หลังจาก ensureSheetColumns เผื่อมีคอลัมน์ใหม่เพิ่มเข้ามา
+    const newHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    newHeaders.forEach((h, i) => { headerMap[h.toLowerCase().replace(/\s+/g, '')] = i + 1; });
+  }
   if (payload.completedMemoUrl)    setVal("CompletedMemoUrl", payload.completedMemoUrl);
   if (payload.completedCommandUrl) setVal("CompletedCommandUrl", payload.completedCommandUrl);
   if (payload.adminMemoUrl)        setVal("AdminMemoUrl", payload.adminMemoUrl);
@@ -2518,28 +2531,54 @@ function getArchiveRequests(yearParam) {
   const yearAD = yearBE - 543;
   const yearStr = String(yearBE);
 
+  // --- JOIN กับ Memos sheet เหมือน getAllRequests() ---
+  // เพื่อดึง URL ไฟล์ที่แอดมินอัพโหลด (adminMemoUrl / completedCommandUrl / dispatchBookUrl)
+  // ที่อาจเก็บอยู่ใน Memos sheet แต่ยังไม่ sync ไปยัง Requests sheet
+  const memoIndex = {};
+  const memosSheet = ss.getSheetByName("Memos");
+  if (memosSheet) {
+    sheetToObject(memosSheet).forEach(memo => {
+      const key = String(memo.refNumber || memo.id || '').trim();
+      if (key) memoIndex[key] = memo;
+    });
+  }
+
   const rows = sheetToObject(sheet);
   return rows.filter(r => {
     // กรองตามปี พ.ศ. จาก id (บค001/2568) หรือ docDate (2025-xx-xx)
     if (r.id && String(r.id).includes('/' + yearStr)) return true;
     if (r.docDate && String(r.docDate).startsWith(String(yearAD))) return true;
     return false;
-  }).map(r => ({
-    id:                r.id             || '',
-    requesterName:     r.requesterName  || r.username || '',
-    purpose:           r.purpose        || '',
-    location:          r.location       || '',
-    docDate:           r.docDate        || '',
-    startDate:         r.startDate      || '',
-    endDate:           r.endDate        || '',
-    status:            r.status         || '',
-    commandStatus:     r.commandStatus  || '',
-    pdfUrl:            r.pdfUrl         || '',
-    completedMemoUrl:  r.completedMemoUrl  || '',
-    completedCommandUrl: r.completedCommandUrl || '',
-    adminMemoUrl:      r.adminMemoUrl   || '',
-    dispatchBookUrl:   r.dispatchBookUrl || '',
-  }));
+  }).map(r => {
+    // --- เติม URL จาก Memos sheet ถ้า Requests sheet ยังไม่มี ---
+    const memo = memoIndex[String(r.id || '').trim()];
+    if (memo) {
+      if (!r.adminMemoUrl        && memo.completedMemoUrl)    r.adminMemoUrl        = memo.completedMemoUrl;
+      if (!r.completedMemoUrl    && memo.completedMemoUrl)    r.completedMemoUrl    = memo.completedMemoUrl;
+      if (!r.completedCommandUrl && memo.completedCommandUrl) r.completedCommandUrl = memo.completedCommandUrl;
+      if (!r.dispatchBookUrl     && memo.dispatchBookUrl)     r.dispatchBookUrl     = memo.dispatchBookUrl;
+      // status จาก Memos ถ้า Requests ยังไม่มี
+      if (!r.status || r.status === 'กำลังดำเนินการ') {
+        if (memo.status) r.status = memo.status;
+      }
+    }
+    return {
+      id:                r.id             || '',
+      requesterName:     r.requesterName  || r.username || '',
+      purpose:           r.purpose        || '',
+      location:          r.location       || '',
+      docDate:           r.docDate        || '',
+      startDate:         r.startDate      || '',
+      endDate:           r.endDate        || '',
+      status:            r.status         || '',
+      commandStatus:     r.commandStatus  || '',
+      pdfUrl:            r.pdfUrl         || '',
+      completedMemoUrl:  r.completedMemoUrl  || '',
+      completedCommandUrl: r.completedCommandUrl || '',
+      adminMemoUrl:      r.adminMemoUrl   || '',
+      dispatchBookUrl:   r.dispatchBookUrl || '',
+    };
+  });
 }
 
 /**
