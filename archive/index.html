@@ -38,23 +38,28 @@
   tbody tr.row-complete{background:rgba(220,252,231,.3)}
   tbody tr.row-complete:hover{background:rgba(220,252,231,.6)}
 
+  /* status badge */
   .sbadge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
   .s-done{background:#dcfce7;color:#166534}
   .s-progress{background:#fef9c3;color:#854d0e}
   .s-pending{background:#f1f5f9;color:#475569}
   .s-rejected{background:#fee2e2;color:#991b1b}
 
+  /* file chips in table */
   .chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;white-space:nowrap}
+  .chip-blue{background:#eff6ff;color:#1d4ed8}
   .chip-green{background:#f0fdf4;color:#166534}
   .chip-purple{background:#fdf4ff;color:#7c3aed}
   .chip-amber{background:#fffbeb;color:#92400e}
 
+  /* empty/loading */
   .state-msg{text-align:center;padding:60px 20px;color:#94a3b8}
   .state-msg .icon{font-size:48px;margin-bottom:12px}
   .state-msg p{font-size:15px}
   .loader-ring{width:36px;height:36px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  /* ===== DETAIL MODAL ===== */
   #detail-modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:1000;align-items:center;justify-content:center;padding:16px}
   #detail-modal.open{display:flex}
   .modal-box{background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.25);width:100%;max-width:620px;max-height:90vh;overflow-y:auto;animation:fadeUp .2s ease}
@@ -166,6 +171,7 @@
   </div>
 </div>
 
+<!-- ===== DETAIL MODAL ===== -->
 <div id="detail-modal" onclick="handleModalClick(event)">
   <div class="modal-box" id="modal-box">
     <div class="modal-header">
@@ -176,6 +182,7 @@
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
+      <!-- ข้อมูลทั่วไป -->
       <div class="modal-section">
         <div class="modal-section-title">ข้อมูลคำขอ</div>
         <div class="info-grid">
@@ -187,10 +194,12 @@
           <div class="info-item"><label>วันที่เอกสาร</label><span id="m-docdate">—</span></div>
         </div>
       </div>
+      <!-- เอกสารสุดท้าย (ไฟล์แอดมินอัพโหลด) -->
       <div class="modal-section">
         <div class="modal-section-title">📥 เอกสารสุดท้าย — ไฟล์ที่แอดมินอัพโหลดให้</div>
         <div id="m-final-docs"></div>
       </div>
+      <!-- เอกสารต้นทาง (ไฟล์ที่ระบบสร้าง) -->
       <div class="modal-section" id="m-origin-section">
         <div class="modal-section-title">📄 เอกสารต้นทาง — ไฟล์ที่ระบบสร้างอัตโนมัติ</div>
         <div id="m-origin-docs"></div>
@@ -206,6 +215,7 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxHffk5rLHflg669FsZysd8GUPe490NzSvCeRToOra_F3G4TtAfxU2ldVZxcPqsSEZo/exec';
 let allData = [];
 
+// ====== INIT ======
 (function init() {
   const sel = document.getElementById('year-select');
   const curBE = new Date().getFullYear() + 543;
@@ -222,6 +232,7 @@ let allData = [];
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 })();
 
+// ====== LOAD ======
 async function loadData() {
   const year = document.getElementById('year-select').value;
   const btn  = document.getElementById('load-btn');
@@ -249,8 +260,10 @@ async function loadData() {
   }
 }
 
+// ====== STATS ======
 function updateStats() {
   const done    = allData.filter(r => isDone(r)).length;
+  // ไฟล์สุดท้าย = ไฟล์ที่แอดมินอัพโหลด (adminMemoUrl / completedCommandUrl / dispatchBookUrl)
   const hasFile = allData.filter(r => r.adminMemoUrl || r.completedCommandUrl || r.dispatchBookUrl || r.completedMemoUrl).length;
   const pending = Math.max(0, allData.length - done);
   document.getElementById('s-total').textContent   = allData.length;
@@ -264,6 +277,7 @@ function isDone(r) {
   return r.status && (r.status.includes('เสร็จสิ้น') || r.status.includes('รับไฟล์'));
 }
 
+// ====== RENDER TABLE ======
 function renderTable() {
   const q      = document.getElementById('search-input').value.toLowerCase().trim();
   const stFilt = document.getElementById('status-filter').value.toLowerCase();
@@ -288,14 +302,17 @@ function renderTable() {
   document.getElementById('count-badge').style.display = 'inline-block';
   document.getElementById('count-badge').textContent   = filtered.length + ' รายการ';
 
-  filtered.forEach(r => {
+  filtered.forEach((r, idx) => {
+    // ---- คอลัมน์ "เอกสารสุดท้าย" แสดงเฉพาะ chip บอกว่ามีไฟล์อะไรบ้าง ----
     const chips = [];
+    // 1. บันทึกข้อความ: adminMemoUrl ก่อน ถ้าไม่มีใช้ completedMemoUrl
     const memoFinal = r.adminMemoUrl || r.completedMemoUrl;
-    if (memoFinal)             chips.push('<span class="chip chip-green">📩 บันทึก</span>');
+    if (memoFinal) chips.push('<span class="chip chip-green">📩 บันทึก</span>');
+    // 2. คำสั่งไปราชการ
     if (r.completedCommandUrl) chips.push('<span class="chip chip-purple">📋 คำสั่ง</span>');
-    if (r.dispatchBookUrl)     chips.push('<span class="chip chip-amber">📦 หนังสือส่ง</span>');
+    // 3. หนังสือส่ง
+    if (r.dispatchBookUrl) chips.push('<span class="chip chip-amber">📦 หนังสือส่ง</span>');
 
-    const idx = allData.indexOf(r);
     const tr = document.createElement('tr');
     if (isDone(r)) tr.className = 'row-complete';
     tr.onclick = () => openModal(r);
@@ -309,40 +326,48 @@ function renderTable() {
     + '<td>' + statusBadge(r.status) + '</td>'
     + '<td>' + (chips.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px">' + chips.join('') + '</div>'
                               : '<span style="color:#cbd5e1;font-size:12px">—</span>') + '</td>'
-    + '<td style="text-align:center"><button onclick="event.stopPropagation();openModal(allData[' + idx + '])" '
+    + '<td style="text-align:center"><button onclick="event.stopPropagation();openModal(allData[' + allData.indexOf(r) + '])" '
     + 'style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">ดู ↗</button></td>';
     tbody.appendChild(tr);
   });
 }
 
+// ====== MODAL ======
 function openModal(r) {
-  document.getElementById('m-id').textContent      = r.id || '—';
-  document.getElementById('m-name').textContent    = r.requesterName || '—';
-  document.getElementById('m-purpose').textContent = r.purpose  || '—';
-  document.getElementById('m-location').textContent= r.location || '—';
-  document.getElementById('m-dates').textContent   = formatDateRange(r.startDate, r.endDate) || '—';
-  document.getElementById('m-docdate').textContent = thDate(r.docDate) || '—';
-  document.getElementById('m-cmdstatus').innerHTML = r.commandStatus ? statusBadge(r.commandStatus) : '<span style="color:#cbd5e1">—</span>';
-  document.getElementById('m-status').innerHTML    = statusBadge(r.status);
+  // Header
+  document.getElementById('m-id').textContent   = r.id || '—';
+  document.getElementById('m-name').textContent = r.requesterName || '—';
+  document.getElementById('m-purpose').textContent  = r.purpose  || '—';
+  document.getElementById('m-location').textContent = r.location || '—';
+  document.getElementById('m-dates').textContent    = formatDateRange(r.startDate, r.endDate) || '—';
+  document.getElementById('m-docdate').textContent  = thDate(r.docDate) || '—';
+  document.getElementById('m-cmdstatus').innerHTML  = r.commandStatus ? statusBadge(r.commandStatus) : '<span style="color:#cbd5e1">—</span>';
+  document.getElementById('m-status').innerHTML     = statusBadge(r.status);
 
+  // ---- เอกสารสุดท้าย (ไฟล์แอดมินอัพโหลด) ----
   const finalDocs = [];
-  if (r.adminMemoUrl)
-    finalDocs.push(docCard(r.adminMemoUrl, '📩', 'บันทึกข้อความ (แอดมินอัพโหลดให้)', 'ไฟล์ฉบับสมบูรณ์จากแอดมิน', 'green'));
-  else if (r.completedMemoUrl)
-    finalDocs.push(docCard(r.completedMemoUrl, '📄', 'บันทึกข้อความ (ผู้ใช้ส่ง)', 'ไฟล์ที่ผู้ใช้ส่งเพื่อขออนุมัติ', 'green'));
-  if (r.completedCommandUrl)
-    finalDocs.push(docCard(r.completedCommandUrl, '📋', 'คำสั่งไปราชการ', 'คำสั่งฉบับอนุมัติแล้ว', 'purple'));
-  if (r.dispatchBookUrl)
-    finalDocs.push(docCard(r.dispatchBookUrl, '📦', 'หนังสือส่ง', 'หนังสือนำส่งเอกสาร', 'amber'));
 
+  // บันทึกข้อความ: adminMemoUrl คือไฟล์ที่แอดมินให้ผู้ใช้, completedMemoUrl คือที่ผู้ใช้ส่งมา
+  if (r.adminMemoUrl) {
+    finalDocs.push(docCard(r.adminMemoUrl, '📩', 'บันทึกข้อความ (แอดมินอัพโหลดให้)', 'ไฟล์ฉบับสมบูรณ์จากแอดมิน', 'green'));
+  } else if (r.completedMemoUrl) {
+    finalDocs.push(docCard(r.completedMemoUrl, '📄', 'บันทึกข้อความ (ผู้ใช้ส่ง)', 'ไฟล์ที่ผู้ใช้ส่งเพื่อขออนุมัติ', 'green'));
+  }
+  if (r.completedCommandUrl) {
+    finalDocs.push(docCard(r.completedCommandUrl, '📋', 'คำสั่งไปราชการ', 'คำสั่งฉบับอนุมัติแล้ว', 'purple'));
+  }
+  if (r.dispatchBookUrl) {
+    finalDocs.push(docCard(r.dispatchBookUrl, '📦', 'หนังสือส่ง', 'หนังสือนำส่งเอกสาร', 'amber'));
+  }
   document.getElementById('m-final-docs').innerHTML = finalDocs.length
     ? finalDocs.join('')
     : '<div class="no-doc">ยังไม่มีไฟล์สุดท้ายจากแอดมิน</div>';
 
+  // ---- เอกสารต้นทาง (ไฟล์ระบบสร้าง) ----
   const originDocs = [];
-  if (r.pdfUrl && r.pdfUrl !== r.adminMemoUrl && r.pdfUrl !== r.completedMemoUrl)
+  if (r.pdfUrl && r.pdfUrl !== r.adminMemoUrl && r.pdfUrl !== r.completedMemoUrl) {
     originDocs.push(docCard(r.pdfUrl, '📄', 'บันทึก (ระบบสร้าง)', 'ไฟล์บันทึกที่ระบบสร้างอัตโนมัติ', ''));
-
+  }
   const originSection = document.getElementById('m-origin-section');
   if (originDocs.length) {
     document.getElementById('m-origin-docs').innerHTML = originDocs.join('');
@@ -362,6 +387,7 @@ function closeModal() {
 function handleModalClick(e) {
   if (e.target === document.getElementById('detail-modal')) closeModal();
 }
+
 function docCard(url, icon, label, desc, cls) {
   return '<a href="' + esc(url) + '" target="_blank" class="doc-card ' + cls + '" onclick="event.stopPropagation()">'
     + '<span class="doc-icon">' + icon + '</span>'
@@ -369,6 +395,8 @@ function docCard(url, icon, label, desc, cls) {
     + '<span class="doc-arrow">↗</span>'
     + '</a>';
 }
+
+// ====== HELPERS ======
 function esc(t) {
   if (!t) return '';
   return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
