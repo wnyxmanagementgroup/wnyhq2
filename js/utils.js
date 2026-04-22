@@ -15,9 +15,26 @@ function clearRequestsCache() {
     if (typeof userMemosCache !== 'undefined') userMemosCache = [];
     console.log("🧹 เคลียร์ Cache ข้อมูลเรียบร้อยแล้ว");
 }
+// ดึง Firebase ID Token สำหรับยืนยันตัวตนกับ GAS
+// คืนค่า null ถ้า Firebase ยังไม่พร้อม หรือยังไม่ได้ login
+async function getFirebaseIdToken() {
+    try {
+        if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
+            return await firebase.auth().currentUser.getIdToken();
+        }
+    } catch (e) {
+        console.warn('⚠️ getIdToken failed:', e.message);
+    }
+    return null;
+}
+
 async function apiCall(method, action, payload = {}, retries = 2) {
     let url = SCRIPT_URL;
     const TIMEOUT_MS = 30000; // 30 วินาที (ถ้าเกินนี้ให้ตัด)
+
+    // แนบ Firebase ID Token ทุก request ยกเว้น verifyCredentials (login)
+    // GAS ฝั่งเซิร์ฟเวอร์จะยืนยัน token นี้ก่อนประมวลผล
+    const idToken = (action !== 'verifyCredentials') ? await getFirebaseIdToken() : null;
 
     // ตั้งค่า Headers
     const options = {
@@ -28,10 +45,11 @@ async function apiCall(method, action, payload = {}, retries = 2) {
 
     // จัดการ Parameter
     if (method === 'GET') {
-        const params = new URLSearchParams({ action, ...payload, cacheBust: new Date().getTime() }); 
+        const params = new URLSearchParams({ action, ...payload, cacheBust: new Date().getTime() });
+        if (idToken) params.set('idToken', idToken);
         url += `?${params}`;
     } else {
-        options.body = JSON.stringify({ action, payload });
+        options.body = JSON.stringify({ action, payload, idToken });
     }
 
     // ฟังก์ชันสำหรับรอเวลา (Backoff) ก่อนลองใหม่
