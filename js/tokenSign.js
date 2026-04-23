@@ -543,6 +543,11 @@ async function loadApprovalLinkManagement() {
                       class="w-full sm:w-auto px-3 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap">
                       ⏭️ ข้ามขั้นตอนนี้
                     </button>` : ''}
+                    <button
+                      onclick="adminCancelForward(this, '${docId}', '${status}')"
+                      class="w-full sm:w-auto px-3 py-2 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap">
+                      ↩️ ยกเลิกการส่งต่อ
+                    </button>
                   </div>
                 </div>`;
             });
@@ -562,7 +567,114 @@ async function loadApprovalLinkManagement() {
     }
 }
 
-// --- 10. Admin: สร้างลิงก์ส่งให้ผู้อนุมัติรายเอกสาร ---
+// --- 10. Admin: ยกเลิกการส่งต่อเอกสาร (ดึงกลับมาที่แอดมิน) ---
+async function adminCancelForward(btn, docId, currentStatus) {
+    const label   = (typeof getDocStatusLabel === 'function')
+        ? getDocStatusLabel(currentStatus) : currentStatus;
+    const docMeta = window._adminApprovalDocs?.[docId] || {};
+    const purpose = docMeta.purpose || docId;
+
+    if (!confirm(
+        `⚠️ ยืนยันยกเลิกการส่งต่อเอกสาร:\n\n` +
+        `เอกสาร: ${purpose}\n` +
+        `สถานะปัจจุบัน: ${label}\n\n` +
+        `เอกสารจะถูกดึงกลับมาที่สถานะ "รอแอดมินตรวจสอบ"\n` +
+        `ลิงก์ลงนามที่เคยสร้างไว้จะถูกยกเลิกทั้งหมด`
+    )) return;
+
+    const origHTML  = btn.innerHTML;
+    const origClass = btn.className;
+    btn.disabled    = true;
+    btn.innerHTML   = '⏳ กำลังยกเลิก...';
+
+    const user      = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+    const safeId    = docId.replace(/[\/\\:\.]/g, '-');
+    const roleKey   = currentStatus.replace(/^waiting_/, '');
+    const origDocId = docMeta.id || docMeta.requestId || docId;
+
+    try {
+        if (typeof showAlert === 'function')
+            showAlert('กำลังดำเนินการ', 'กำลังยกเลิกการส่งต่อเอกสาร...', false);
+
+        // 1. อัปเดต Firestore: ดึงกลับมาที่ waiting_admin_review
+        const updateData = {
+            docStatus:                          'waiting_admin_review',
+            [`cancelledStep_${roleKey}`]:       true,
+            [`cancelledBy_${roleKey}`]:         user?.name || user?.fullName || user?.username || 'admin',
+            [`cancelledAt_${roleKey}`]:         firebase.firestore.FieldValue.serverTimestamp(),
+            lastUpdated:                        firebase.firestore.FieldValue.serverTimestamp(),
+        };
+
+        if (typeof db !== 'undefined') {
+            await db.collection('requests').doc(safeId).set(updateData, { merge: true });
+        }
+
+        // 2. ยกเลิก approvalLinks ที่ยังไม่ได้ใช้ (mark used=true)
+        if (typeof db !== 'undefined') {
+            try {
+                const linksSnap = await db.collection('approvalLinks')
+                    .where('safeId', '==', safeId)
+                    .where('used', '==', false)
+                    .get();
+                const batch = db.batch();
+                linksSnap.docs.forEach(linkDoc => {
+                    batch.update(linkDoc.ref, { used: true });
+                });
+                if (!linksSnap.empty) {
+                    await batch.commit();
+                    console.log(`🔗 ยกเลิก approvalLinks ${linksSnap.size} รายการ สำหรับ ${safeId}`);
+                }
+            } catch (linkErr) {
+                console.warn('⚠️ ยกเลิก approvalLinks ไม่สำเร็จ:', linkErr.message);
+            }
+        }
+
+        // 3. Sync กลับไปยัง Google Sheets (background)
+        if (typeof apiCall === 'function') {
+            apiCall('POST', 'updateRequest', {
+                requestId: origDocId,
+                docStatus: 'waiting_admin_review',
+            }).catch(err => console.warn('Sheet update error (cancel):', err));
+        }
+
+        // 4. Sync cache
+        window._approvalDocs = window._approvalDocs || {};
+        window._approvalDocs[safeId] = {
+            ...docMeta,
+            docStatus: 'waiting_admin_review',
+            [`cancelledStep_${roleKey}`]: true,
+            [`cancelledBy_${roleKey}`]:   user?.name || user?.fullName || user?.username || 'admin',
+        };
+
+        // 5. ปิด loading alert
+        const alertEl = document.getElementById('alert-modal');
+        if (alertEl) alertEl.style.display = 'none';
+
+        // 6. แจ้งผลสำเร็จ
+        if (typeof showAlert === 'function') {
+            showAlert('✅ ยกเลิกสำเร็จ',
+                `ยกเลิกการส่งต่อเอกสาร "${purpose}"\n` +
+                `จากขั้นตอน "${label}" เรียบร้อยแล้ว\n\n` +
+                `เอกสารกลับมาอยู่ที่ "รอแอดมินตรวจสอบ"`);
+        }
+
+        // 7. รีโหลดรายการ
+        setTimeout(() => loadApprovalLinkManagement(), 500);
+
+    } catch (e) {
+        const alertEl = document.getElementById('alert-modal');
+        if (alertEl) alertEl.style.display = 'none';
+
+        btn.disabled  = false;
+        btn.innerHTML = origHTML;
+        btn.className = origClass;
+
+        if (typeof showAlert === 'function') showAlert('❌ ผิดพลาด', 'ไม่สามารถยกเลิกได้: ' + e.message);
+        else alert('เกิดข้อผิดพลาด: ' + e.message);
+    }
+}
+
+// --- 11. Admin: สร้างลิงก์ส่งให้ผู้อนุมัติรายเอกสาร ---
 async function adminGenerateLink(btn, requestId, docStatus) {
     if (!requestId || !docStatus) return;
 
