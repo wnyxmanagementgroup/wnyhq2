@@ -1241,6 +1241,7 @@ async function loadPendingApprovals() {
 
     try {
         const targetStatus = getTargetStatusForUser(user.role);
+        console.log(`👤 User: ${user.username}, Role: ${user.role}, TargetStatus: ${targetStatus}`);
 
         if (!targetStatus) {
             container.innerHTML = `<div class="text-center py-10 text-gray-500">คุณไม่มีสิทธิ์ในการอนุมัติเอกสาร</div>`;
@@ -1252,6 +1253,8 @@ async function loadPendingApprovals() {
         const snapshot = await db.collection('requests')
             .where('docStatus', '==', targetStatus)
             .get();
+
+        console.log(`📊 Found ${snapshot.size} documents with docStatus="${targetStatus}"`);
 
         if (snapshot.empty) {
             container.innerHTML = `
@@ -1282,10 +1285,13 @@ async function loadPendingApprovals() {
             return tB - tA; // ล่าสุดก่อน
         });
 
+        console.log(`📄 Sorted ${docs.length} documents`);
+
         // สารบรรณ: แยก 2 ตาราง (คำสั่ง / บันทึกข้อความ)
         if (user.role === 'saraban') {
             const cmdDocs  = docs.filter(d => d.docType === 'command' || !!d.commandPdfUrl);
             const memoDocs = docs.filter(d => d.docType !== 'command' && !d.commandPdfUrl);
+            console.log(`📋 Commands: ${cmdDocs.length}, Memos: ${memoDocs.length}`);
             container.innerHTML =
                 _renderApprovalTable(cmdDocs,  user, '📝 คำสั่งไปราชการ',  'indigo') +
                 _renderApprovalTable(memoDocs, user, '📄 บันทึกข้อความ',   'teal');
@@ -1294,8 +1300,20 @@ async function loadPendingApprovals() {
         }
 
     } catch (error) {
-        console.error("Error loading approvals:", error);
-        container.innerHTML = `<div class="text-center py-10 text-red-500">เกิดข้อผิดพลาดในการดึงข้อมูล</div>`;
+        console.error("❌ Error loading approvals:", error);
+        console.error("Error details:", {
+            message: error.message,
+            code: error.code,
+            stack: error.stack
+        });
+        container.innerHTML = `
+            <div class="text-center py-10 bg-red-50 rounded-lg">
+                <p class="text-red-600 font-bold">เกิดข้อผิดพลาดในการดึงข้อมูล</p>
+                <p class="text-sm text-red-500 mt-2">${error.message || 'Unknown error'}</p>
+                <button onclick="loadPendingApprovals()" class="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                    🔄 ลองใหม่
+                </button>
+            </div>`;
     }
 }
 
