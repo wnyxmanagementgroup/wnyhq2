@@ -178,7 +178,7 @@ async function showTrashBin() {
     const isAdmin = user && (user.role === 'admin' || user.isAdmin);
 
     try {
-        const gasRes = await apiCall('GET', 'getTrashItems', isAdmin ? {} : { username: user.username });
+        const gasRes = await apiCall('POST', 'getTrashItems', isAdmin ? {} : { username: user.username });
         const items = gasRes.status === 'success' ? (gasRes.data || []) : [];
 
         if (items.length === 0) {
