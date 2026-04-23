@@ -1037,7 +1037,7 @@ async function handleMemoSubmitFromModal(e) {
     // กำหนด docStatus ว่าส่งต่อให้ใคร (เบิก → admin, อื่น → ตาม select)
     const forwardToStatus = memoType === 'reimburse'
         ? 'waiting_admin_review'
-        : (document.getElementById('modal-forward-to')?.value || 'waiting_admin_review');
+        : (document.getElementById('modal-forward-to')?.value || 'waiting_director');
 
     toggleLoader('send-memo-submit-button', true);
 
