@@ -548,6 +548,11 @@ async function loadApprovalLinkManagement() {
                       class="w-full sm:w-auto px-3 py-2 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap">
                       ↩️ ยกเลิกการส่งต่อ
                     </button>
+                    <button
+                      onclick="adminHandleOffline(this, '${docId}', '${status}')"
+                      class="w-full sm:w-auto px-3 py-2 bg-gray-500 hover:bg-gray-600 active:bg-gray-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap">
+                      📴 จัดการแบบออฟไลน์
+                    </button>
                   </div>
                 </div>`;
             });
@@ -567,7 +572,106 @@ async function loadApprovalLinkManagement() {
     }
 }
 
-// --- 10. Admin: ยกเลิกการส่งต่อเอกสาร (ดึงกลับมาที่แอดมิน) ---
+// --- 10. Admin: จัดการเอกสารแบบออฟไลน์ (ดึงออกจากระบบลิงก์ลงนามทั้งหมด) ---
+async function adminHandleOffline(btn, docId, currentStatus) {
+    const label   = (typeof getDocStatusLabel === 'function')
+        ? getDocStatusLabel(currentStatus) : currentStatus;
+    const docMeta = window._adminApprovalDocs?.[docId] || {};
+    const purpose = docMeta.purpose || docId;
+
+    if (!confirm(
+        `📴 ยืนยันจัดการเอกสารแบบออฟไลน์:\n\n` +
+        `เอกสาร: ${purpose}\n` +
+        `สถานะปัจจุบัน: ${label}\n\n` +
+        `เอกสารจะถูกนำออกจากระบบลิงก์ลงนามทั้งหมด\n` +
+        `และจะไม่แสดงในหน้าจัดการลิงก์ลงนามอีกต่อไป\n` +
+        `ลิงก์ที่เคยสร้างไว้จะถูกยกเลิกทั้งหมด`
+    )) return;
+
+    const origHTML  = btn.innerHTML;
+    const origClass = btn.className;
+    btn.disabled    = true;
+    btn.innerHTML   = '⏳ กำลังดำเนินการ...';
+
+    const user      = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+    const safeId    = docId.replace(/[\/\\:\.]/g, '-');
+    const roleKey   = currentStatus.replace(/^waiting_/, '');
+    const origDocId = docMeta.id || docMeta.requestId || docId;
+
+    try {
+        if (typeof showAlert === 'function')
+            showAlert('กำลังดำเนินการ', 'กำลังนำเอกสารออกจากระบบลิงก์ลงนาม...', false);
+
+        // 1. อัปเดต Firestore: เปลี่ยน docStatus เป็น handled_offline
+        const updateData = {
+            docStatus:                          'handled_offline',
+            offlineFrom:                        currentStatus,
+            offlineBy:                          user?.name || user?.fullName || user?.username || 'admin',
+            offlineAt:                          firebase.firestore.FieldValue.serverTimestamp(),
+            lastUpdated:                        firebase.firestore.FieldValue.serverTimestamp(),
+        };
+
+        if (typeof db !== 'undefined') {
+            await db.collection('requests').doc(safeId).set(updateData, { merge: true });
+        }
+
+        // 2. ยกเลิก approvalLinks ที่ยังไม่ได้ใช้ (mark used=true)
+        if (typeof db !== 'undefined') {
+            try {
+                const linksSnap = await db.collection('approvalLinks')
+                    .where('safeId', '==', safeId)
+                    .where('used', '==', false)
+                    .get();
+                const batch = db.batch();
+                linksSnap.docs.forEach(linkDoc => {
+                    batch.update(linkDoc.ref, { used: true });
+                });
+                if (!linksSnap.empty) {
+                    await batch.commit();
+                    console.log(`🔗 ยกเลิก approvalLinks ${linksSnap.size} รายการ (ออฟไลน์) สำหรับ ${safeId}`);
+                }
+            } catch (linkErr) {
+                console.warn('⚠️ ยกเลิก approvalLinks ไม่สำเร็จ (ออฟไลน์):', linkErr.message);
+            }
+        }
+
+        // 3. Sync กลับไปยัง Google Sheets (background)
+        if (typeof apiCall === 'function') {
+            apiCall('POST', 'updateRequest', {
+                requestId: origDocId,
+                docStatus: 'handled_offline',
+            }).catch(err => console.warn('Sheet update error (offline):', err));
+        }
+
+        // 4. ปิด loading alert
+        const alertEl = document.getElementById('alert-modal');
+        if (alertEl) alertEl.style.display = 'none';
+
+        // 5. แจ้งผลสำเร็จ
+        if (typeof showAlert === 'function') {
+            showAlert('✅ ดำเนินการสำเร็จ',
+                `นำเอกสาร "${purpose}" ออกจากระบบลิงก์ลงนามแล้ว\n\n` +
+                `สถานะเปลี่ยนเป็น "จัดการแบบออฟไลน์"\n` +
+                `ลิงก์ลงนามทั้งหมดถูกยกเลิกแล้ว`);
+        }
+
+        // 6. รีโหลดรายการ
+        setTimeout(() => loadApprovalLinkManagement(), 500);
+
+    } catch (e) {
+        const alertEl = document.getElementById('alert-modal');
+        if (alertEl) alertEl.style.display = 'none';
+
+        btn.disabled  = false;
+        btn.innerHTML = origHTML;
+        btn.className = origClass;
+
+        if (typeof showAlert === 'function') showAlert('❌ ผิดพลาด', 'ไม่สามารถดำเนินการได้: ' + e.message);
+        else alert('เกิดข้อผิดพลาด: ' + e.message);
+    }
+}
+
+// --- 10.1 Admin: ยกเลิกการส่งต่อเอกสาร (ดึงกลับมาที่แอดมิน) ---
 async function adminCancelForward(btn, docId, currentStatus) {
     const label   = (typeof getDocStatusLabel === 'function')
         ? getDocStatusLabel(currentStatus) : currentStatus;
