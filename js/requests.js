@@ -356,22 +356,23 @@ function renderUserRequests(requests) {
 
         // Badge สถานะ
         let statusBadge = '';
+        const _badgeBase = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap';
         if (isReadyToUse) {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-800 border border-green-300 font-bold">✅ รับไฟล์ได้แล้ว</span>`;
+            statusBadge = `<span class="${_badgeBase}" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;">✅ รับไฟล์ได้แล้ว</span>`;
         } else if (completedCommandUrl) {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 border border-green-200 font-medium">✅ ออกคำสั่งแล้ว</span>`;
+            statusBadge = `<span class="${_badgeBase}" style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;">✅ ออกคำสั่งแล้ว</span>`;
         } else if (isFixing) {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 border border-red-200 animate-pulse font-bold">⚠️ ตีกลับ/ต้องแก้ไข</span>`;
+            statusBadge = `<span class="${_badgeBase} animate-pulse" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;">⚠️ ตีกลับ/ต้องแก้ไข</span>`;
         } else if (needsToSend) {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 border border-orange-200 font-bold">⏳ รอยืนยันการส่ง</span>`;
+            statusBadge = `<span class="${_badgeBase}" style="background:#ffedd5;color:#c2410c;border:1px solid #fed7aa;">⏳ รอยืนยันการส่ง</span>`;
         } else if (isCompleted) {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 border border-blue-200">☑️ ส่งแล้ว (รอคำสั่ง)</span>`;
+            statusBadge = `<span class="${_badgeBase}" style="background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;">☑️ ส่งแล้ว (รอคำสั่ง)</span>`;
         } else if (req.status === 'ไม่อนุมัติ') {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 border border-red-200">❌ ไม่อนุมัติ</span>`;
+            statusBadge = `<span class="${_badgeBase}" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;">❌ ไม่อนุมัติ</span>`;
         } else if (isSubmitted) {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 border border-blue-200 font-bold">📨 ส่งแล้ว รอดำเนินการ</span>`;
+            statusBadge = `<span class="${_badgeBase}" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">📨 ส่งแล้ว รอดำเนินการ</span>`;
         } else {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700 border border-gray-200">… ดำเนินการ</span>`;
+            statusBadge = `<span class="${_badgeBase}" style="background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;">… ดำเนินการ</span>`;
         }
 
         // ปุ่มดำเนินการ (compact สำหรับ table)
@@ -393,7 +394,7 @@ function renderUserRequests(requests) {
         if (_adminFiles.length === 1) {
             // ไฟล์เดียว → link โดยตรง
             actionBtns += `<a href="${_adminFiles[0].url}" target="_blank"
-                class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold">
+                class="btn btn-xs w-full font-bold" style="background:linear-gradient(135deg,#34d399,#10b981);color:white;">
                 ${_adminFiles[0].icon} ${_adminFiles[0].label}</a>`;
         } else if (_adminFiles.length > 1) {
             // หลายไฟล์ → dropdown เมนู
@@ -408,7 +409,7 @@ function renderUserRequests(requests) {
             actionBtns += `
                 <div class="w-full file-menu-wrapper">
                     <button onclick="toggleFileMenu('${_menuId}', event)"
-                        class="btn btn-xs bg-green-600 hover:bg-green-700 text-white w-full font-bold flex items-center justify-center gap-1">
+                        class="btn btn-xs w-full font-bold flex items-center justify-center gap-1" style="background:linear-gradient(135deg,#34d399,#10b981);color:white;">
                         <span>📥 นำไฟล์ไปใช้งาน</span>
                         <span class="opacity-70 text-xs">▾</span>
                     </button>
@@ -424,13 +425,13 @@ function renderUserRequests(requests) {
             const btnLabel  = isFixing    ? '📤 ส่งใหม่ (ตีกลับ)'
                             : needsToSend ? '📤 ส่งบันทึก'
                             :               '📤 ส่ง/อัปเดตบันทึก';
-            actionBtns += `<button onclick="openSendMemoFromList('${safeId}')" class="btn btn-xs bg-orange-500 hover:bg-orange-600 text-white ${isUrgent ? 'animate-pulse' : ''} w-full">${btnLabel}</button>`;
+            actionBtns += `<button onclick="openSendMemoFromList('${safeId}')" class="btn btn-xs w-full ${isUrgent ? 'animate-pulse' : ''}" style="background:linear-gradient(135deg,#fb923c,#f97316);color:white;">${btnLabel}</button>`;
         }
         // ไฟล์ที่ผู้ใช้ส่งมาเอง (แยกออกจากไฟล์แอดมิน)
         if (completedMemoUrl && !_seenFileUrls.has(completedMemoUrl)) {
-            actionBtns += `<a href="${completedMemoUrl}" target="_blank" class="btn btn-xs bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 w-full">📄 บันทึก (ส่ง)</a>`;
+            actionBtns += `<a href="${completedMemoUrl}" target="_blank" class="btn btn-xs w-full" style="background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;">📄 บันทึก (ส่ง)</a>`;
         } else if (draftMemoUrl && !isCompleted && !_seenFileUrls.has(draftMemoUrl)) {
-            actionBtns += `<a href="${draftMemoUrl}" target="_blank" class="btn btn-xs bg-teal-100 text-teal-700 border border-teal-200 hover:bg-teal-200 w-full">📄 บันทึก (ร่าง)</a>`;
+            actionBtns += `<a href="${draftMemoUrl}" target="_blank" class="btn btn-xs w-full" style="background:#ccfbf1;color:#0f766e;border:1px solid #99f6e4;">📄 บันทึก (ร่าง)</a>`;
         }
         // ปุ่มสร้างกำหนดการเดินทางพานักเรียน (แสดงเฉพาะกรณีที่ผ่านเงื่อนไข)
         if (typeof isEligibleForTravelSchedule === 'function' && isEligibleForTravelSchedule(req)) {
@@ -439,9 +440,9 @@ function renderUserRequests(requests) {
 
         // ปุ่มแก้ไข/ลบ
         const editDeleteBtns = canEdit ? `
-            <div class="flex gap-1 mt-1 justify-center">
-                ${!isCompleted ? `<button onclick="editRequest('${safeId}')" class="text-xs text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100">✏️</button>` : ''}
-                <button onclick="deleteRequest('${safeId}')" class="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded hover:bg-red-100">🗑️</button>
+            <div class="flex gap-1 mt-1">
+                ${!isCompleted ? `<button onclick="editRequest('${safeId}')" class="btn btn-xs flex-1" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;">✏️ แก้ไข</button>` : ''}
+                <button onclick="deleteRequest('${safeId}')" class="btn btn-xs flex-1" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;">🗑️ ลบ</button>
             </div>` : '';
 
         // สีแถว
@@ -459,19 +460,22 @@ function renderUserRequests(requests) {
         return `
         <tr class="${rowClass}">
             <td>
-                <div class="font-bold text-indigo-700">${safeId}</div>
+                <div class="font-bold text-indigo-700 text-sm leading-tight">${safeId}</div>
                 ${rejectBanner}
             </td>
             <td style="max-width:220px">
-                <div class="text-gray-800 text-sm" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(req.purpose)}</div>
+                <div class="text-gray-800 text-sm leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(req.purpose)}</div>
             </td>
-            <td class="text-sm text-gray-600">${escapeHtml(req.location || '-')}</td>
+            <td class="text-sm text-gray-600 max-w-[140px]">
+                <div style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(req.location || '-')}</div>
+            </td>
             <td class="whitespace-nowrap text-xs text-gray-500">
-                ${formatDate(req.startDate)}<br><span class="text-gray-400">– ${formatDate(req.endDate)}</span>
+                <div>${formatDate(req.startDate)}</div>
+                <div class="text-gray-400">– ${formatDate(req.endDate)}</div>
             </td>
             <td>${statusBadge}</td>
             <td>
-                <div class="flex flex-col gap-1 items-stretch" style="min-width:120px">
+                <div class="flex flex-col gap-1 items-stretch" style="min-width:128px">
                     ${actionBtns}
                     ${editDeleteBtns}
                 </div>
@@ -3113,8 +3117,9 @@ async function finalizeDocumentSubmission(pdfBlob) {
     const formData = requesterStamperState.formData;
     const isEdit = requesterStamperState.isEdit;
 
+    showSavingOverlay('กำลังอัปโหลดเอกสารและบันทึกข้อมูล...');
     try {
-        // 1. อัปโหลดไฟล์ขึ้น Firebase Storage
+        // 1. อัปโหลดไฟล์ขึ้น Google Drive
         const fileName = `memo_${formData.username}_${Date.now()}.pdf`;
         const uploadedUrl = await uploadPdfToStorage(pdfBlob, formData.username, fileName);
         if (!uploadedUrl) throw new Error("Upload Failed");
@@ -3168,6 +3173,8 @@ async function finalizeDocumentSubmission(pdfBlob) {
         console.error(error);
         document.getElementById('alert-modal').style.display = 'none';
         showAlert('ผิดพลาด', 'บันทึกข้อมูลไม่สำเร็จ: ' + error.message);
+    } finally {
+        hideSavingOverlay();
     }
 }
 // -----------------------------------------------------------------------

@@ -25,29 +25,34 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // ตรวจว่ามี user doc อยู่จริงหรือไม่
+    function userDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     // ดึงข้อมูล user doc ของผู้ที่กำลัง login (อ่านจาก Firestore)
     function myUserDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // ดึง role ของผู้ที่กำลัง login
+    // ดึง role ของผู้ที่กำลัง login — คืน 'none' ถ้าไม่มี doc
     function myRole() {
-      return myUserDoc().role;
+      return userDocExists() ? myUserDoc().role : 'none';
     }
 
-    // ดึง username ของผู้ที่กำลัง login
+    // ดึง username ของผู้ที่กำลัง login — คืน '' ถ้าไม่มี doc
     function myUsername() {
-      return myUserDoc().username;
+      return userDocExists() ? myUserDoc().username : '';
     }
 
     // ตรวจว่าเป็น admin หรือเปล่า
     function isAdmin() {
-      return isAuthenticated() && myRole() == 'admin';
+      return isAuthenticated() && userDocExists() && myRole() == 'admin';
     }
 
     // ตรวจว่าเป็นผู้อนุมัติ (ทุก role ยกเว้น user และ admin)
     function isApprover() {
-      return isAuthenticated() && myRole() in [
+      return isAuthenticated() && userDocExists() && myRole() in [
         'director', 'saraban',
         'head_science', 'head_math', 'head_thai', 'head_foreign',
         'head_social', 'head_health', 'head_art', 'head_career',
@@ -59,7 +64,7 @@ service cloud.firestore {
 
     // ตรวจว่าเป็นเจ้าของ request (เทียบจาก username field)
     function isOwnerOf(res) {
-      return isAuthenticated() && res.data.username == myUsername();
+      return isAuthenticated() && userDocExists() && res.data.username == myUsername();
     }
 
     // ------------------------------------------------------------------
@@ -90,8 +95,9 @@ service cloud.firestore {
       allow read: if isAuthenticated()
                   && (isAdmin() || request.auth.uid == userId);
 
-      // สร้างบัญชีใหม่: admin เท่านั้น
-      allow create: if isAdmin();
+      // สร้างบัญชีใหม่: admin สร้างได้ทุกคน | ตัวเองสร้าง doc ตัวเองได้ (auto-provision ตอน login)
+      // role ที่แท้จริงมาจาก GAS/Sheets ซึ่งเป็น authoritative source อยู่แล้ว
+      allow create: if isAdmin() || request.auth.uid == userId;
 
       // แก้ไข: admin แก้ได้ทุกคน | ตัวเองแก้ได้เฉพาะ field ที่อนุญาต
       //   (ป้องกันไม่ให้ user แก้ role ตัวเองเป็น admin)
@@ -154,6 +160,19 @@ service cloud.firestore {
       // ประกาศอ่านได้แม้ยังไม่ login (แสดงบนหน้า login)
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // memos — บันทึกข้อความ
+    // ------------------------------------------------------------------
+    match /memos/{memoId} {
+      allow read: if isAuthenticated()
+                  && (isAdmin() || isApprover() || isOwnerOf(resource));
+      allow create: if isAuthenticated()
+                    && request.resource.data.username == myUsername();
+      allow update: if isAuthenticated()
+                    && (isAdmin() || isOwnerOf(resource));
+      allow delete: if isAdmin();
     }
 
     // ------------------------------------------------------------------

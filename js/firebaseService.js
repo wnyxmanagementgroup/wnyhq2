@@ -2,7 +2,7 @@
  * firebaseService.js
  * =====================================================================
  * Firestore เป็นฐานข้อมูลหลัก — GAS/Sheets เป็น async backup เท่านั้น
- * Firebase Storage เป็นที่เก็บ PDF หลัก — DriveApp ไม่ถูกเรียกใน critical path
+ * Google Drive (ผ่าน GAS uploadGeneratedFile) เป็นที่เก็บไฟล์หลัก
  * =====================================================================
  */
 
@@ -53,47 +53,55 @@ async function generateRequestId(docDate) {
 }
 
 // -----------------------------------------------------------------------
-// 2. PDF UPLOAD — อัปโหลด PDF ไปยัง Firebase Storage
-//    (ไม่ต้องพึ่ง DriveApp ของ GAS เลย)
+// 2. FIREBASE AUTH — sign in anonymously เพื่อให้ Firestore rules ผ่าน
+// -----------------------------------------------------------------------
+
+async function ensureFirebaseAuth() {
+    if (!firebase.auth) return;
+    if (firebase.auth().currentUser) return;
+    try {
+        await firebase.auth().signInAnonymously();
+        console.log('🔑 Signed in anonymously for Firestore access');
+    } catch (e) {
+        console.warn('⚠️ Anonymous sign-in failed:', e.message);
+    }
+}
+
+// -----------------------------------------------------------------------
+// 3. FILE UPLOAD — อัปโหลดไฟล์ไปยัง Google Drive ผ่าน GAS
+//    ใช้ apiCall → GAS uploadGeneratedFile → DriveApp
 // -----------------------------------------------------------------------
 
 /**
- * อัปโหลดไฟล์ Blob ไปยัง Firebase Storage (Generic)
+ * อัปโหลดไฟล์ Blob ไปยัง Google Drive ผ่าน GAS (Generic)
  * รองรับ PDF, DOCX, รูปภาพ และไฟล์อื่น ๆ
- * คืนค่า Download URL ที่ใช้งานได้ทันที
+ * คืนค่า Google Drive URL ที่ใช้งานได้ทันที
  */
 async function uploadFileToStorage(blob, username, filename, mimeType) {
-    if (typeof firebase === 'undefined' || !firebase.storage) {
-        throw new Error('Firebase Storage SDK not available');
-    }
-
-    // Firebase Storage rules require request.auth != null.
-    // App uses GAS-based session auth (not Firebase Auth), so sign in anonymously if needed.
-    if (firebase.auth && !firebase.auth().currentUser) {
-        try {
-            await firebase.auth().signInAnonymously();
-            console.log('🔑 Signed in anonymously for Storage access');
-        } catch (authErr) {
-            console.warn('⚠️ Anonymous sign-in failed:', authErr.message);
-        }
-    }
-
-    const storage = firebase.storage();
     const safeUsername = (username || 'unknown').replace(/[^a-zA-Z0-9ก-๙_-]/g, '_');
     const safeFilename = filename || `${safeUsername}_${Date.now()}`;
     const contentType = mimeType || blob.type || 'application/octet-stream';
 
-    // ใช้ path เดียว uploads/ ให้ Storage rules ครอบคลุมได้ง่าย
-    const storageRef = storage.ref(`uploads/${safeUsername}/${safeFilename}`);
-    const snapshot = await storageRef.put(blob, {
-        contentType,
-        customMetadata: { uploadedBy: username || 'system', uploadedAt: new Date().toISOString() }
+    // แปลง Blob เป็น base64 แล้วส่งไป GAS
+    const base64Data = await blobToBase64(blob);
+
+    const result = await apiCall('POST', 'uploadGeneratedFile', {
+        data: base64Data,
+        filename: safeFilename,
+        mimeType: contentType,
+        username: safeUsername
     });
-    return await snapshot.ref.getDownloadURL();
+
+    if (!result || result.status !== 'success') {
+        throw new Error(result?.message || 'Google Drive upload failed');
+    }
+
+    console.log('✅ File uploaded to Google Drive:', result.url);
+    return result.url;
 }
 
 /**
- * อัปโหลด PDF Blob ไปยัง Firebase Storage
+ * อัปโหลด PDF Blob ไปยัง Google Drive
  * (wrapper ของ uploadFileToStorage สำหรับ PDF โดยเฉพาะ)
  */
 async function uploadPdfToStorage(pdfBlob, username, filename) {
@@ -155,40 +163,46 @@ function syncToGASBackground(action, payload, docId = null) {
  * ไม่ต้องรอ GAS เลย ผู้ใช้เห็นข้อมูลทันที
  */
 async function submitRequestWithHybrid(formData) {
-    // 1. สร้าง ID จาก Firestore Counter (ไม่ต้องเรียก GAS)
-    const requestId = await generateRequestId(formData.docDate);
-    const docId = requestId.replace(/[\/\\:\.]/g, '-');
+    await ensureFirebaseAuth();
+    showSavingOverlay('กำลังบันทึกคำขอ...');
+    try {
+        // 1. สร้าง ID จาก Firestore Counter (ไม่ต้องเรียก GAS)
+        const requestId = await generateRequestId(formData.docDate);
+        const docId = requestId.replace(/[\/\\:\.]/g, '-');
 
-    console.log('📝 Generated ID:', requestId, '→ docId:', docId);
+        console.log('📝 Generated ID:', requestId, '→ docId:', docId);
 
-    // 2. เตรียมข้อมูลที่จะบันทึก Firestore
-    const firestorePayload = { ...formData };
-    delete firestorePayload.action;
-    delete firestorePayload.btnId;
-    delete firestorePayload.pdfBase64;
-    delete firestorePayload.signatureBase64;
+        // 2. เตรียมข้อมูลที่จะบันทึก Firestore
+        const firestorePayload = { ...formData };
+        delete firestorePayload.action;
+        delete firestorePayload.btnId;
+        delete firestorePayload.pdfBase64;
+        delete firestorePayload.signatureBase64;
 
-    // 3. บันทึกลง Firestore ทันที (primary write — ไม่รอ PDF, ไม่รอ GAS)
-    await db.collection('requests').doc(docId).set({
-        ...firestorePayload,
-        id: requestId,
-        status: 'กำลังดำเนินการ',
-        pdfStatus: 'pending',
-        syncedToSheets: false,
-        _source: 'firestore',
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+        // 3. บันทึกลง Firestore ทันที
+        await db.collection('requests').doc(docId).set({
+            ...firestorePayload,
+            id: requestId,
+            status: 'กำลังดำเนินการ',
+            pdfStatus: 'pending',
+            syncedToSheets: false,
+            _source: 'firestore',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
 
-    console.log('✅ Saved to Firestore:', docId);
+        console.log('✅ Saved to Firestore:', docId);
 
-    // 4. Sync ไป GAS Sheets ในพื้นหลัง (ไม่ block)
-    syncToGASBackground('saveRequestAndGeneratePdf', {
-        ...firestorePayload,
-        id: requestId,
-        preGeneratedPdfUrl: formData.pdfUrl || 'SKIP_GENERATION'
-    }, docId);
+        // 4. Sync ไป GAS Sheets ในพื้นหลัง (ไม่ block)
+        syncToGASBackground('saveRequestAndGeneratePdf', {
+            ...firestorePayload,
+            id: requestId,
+            preGeneratedPdfUrl: formData.pdfUrl || 'SKIP_GENERATION'
+        }, docId);
 
-    return { status: 'success', data: { id: requestId, docId } };
+        return { status: 'success', data: { id: requestId, docId } };
+    } finally {
+        hideSavingOverlay();
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -199,7 +213,9 @@ async function submitRequestWithHybrid(formData) {
  * สร้างคำสั่งไปราชการ — Firestore-first, GAS async
  */
 async function generateCommandHybrid(data) {
-    if (!data.id) throw new Error('ไม่พบรหัสเอกสาร (data.id) สำหรับการสร้างคำสั่ง');
+    await ensureFirebaseAuth();
+    showSavingOverlay('กำลังสร้างคำสั่งไปราชการ...');
+    if (!data.id) { hideSavingOverlay(); throw new Error('ไม่พบรหัสเอกสาร (data.id) สำหรับการสร้างคำสั่ง'); }
     const docId = data.id.replace(/[\/\\:\.]/g, '-');
 
     try {
@@ -222,10 +238,10 @@ async function generateCommandHybrid(data) {
             };
             const { pdfBlob } = await generateOfficialPDF(commandData);
 
-            // อัปโหลดไป Firebase Storage
+            // อัปโหลดไป Google Drive ผ่าน GAS
             const filename = `command_${docId}_${Date.now()}.pdf`;
             commandPdfUrl = await uploadPdfToStorage(pdfBlob, data.username || data.createdby || 'admin', filename);
-            console.log('✅ Command PDF uploaded to Storage:', commandPdfUrl);
+            console.log('✅ Command PDF uploaded to Drive:', commandPdfUrl);
 
         } catch (e) {
             console.warn('⚠️ Command PDF generation failed, will use GAS fallback:', e.message);
@@ -254,6 +270,8 @@ async function generateCommandHybrid(data) {
             errorLog: error.message
         }, { merge: true });
         throw error;
+    } finally {
+        hideSavingOverlay();
     }
 }
 

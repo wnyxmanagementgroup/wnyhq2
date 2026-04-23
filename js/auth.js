@@ -56,10 +56,9 @@ async function handleLogin(e) {
             sessionStorage.setItem('currentUser', JSON.stringify(realUser));
             window.currentUser = realUser;
             
-            // ... (Code เปลี่ยนหน้าจอเดิม) ...
             initializeUserSession(realUser);
             showMainApp();
-            // ...
+            checkAndShowAnnouncement();
         } else {
             throw new Error(result.message || 'รหัสผ่านไม่ถูกต้อง');
         }
@@ -97,7 +96,10 @@ function loadProfileData() {
 }
 
 // ✅ [แก้ไข] ฟังก์ชันตั้งค่า Session และแสดงปุ่ม Admin ให้ถูกต้อง
-function initializeUserSession(user) {
+async function initializeUserSession(user) {
+    // sign in anonymously เพื่อให้ Firestore rules ผ่าน (ก่อน listener ทุกตัว)
+    if (typeof ensureFirebaseAuth === 'function') await ensureFirebaseAuth();
+
     // 1. สลับหน้าจอ
     const loginScreen = document.getElementById('login-screen');
     const mainApp = document.getElementById('main-app');

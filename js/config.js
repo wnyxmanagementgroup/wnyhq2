@@ -19,7 +19,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDy_ucbp_8R_o3O4cZY_TPesbkptUERn2E",
   authDomain: "wny-hq.firebaseapp.com",
   projectId: "wny-hq",
-  storageBucket: "wny-hq.firebasestorage.app",
+  storageBucket: "wny-hq",
   messagingSenderId: "1046709727117",
   appId: "1:1046709727117:web:25570ee363e3a821a397c4"
 };

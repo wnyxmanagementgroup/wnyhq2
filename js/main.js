@@ -109,9 +109,9 @@ async function switchPage(targetPageId) {
         if (typeof fetchAllUsers === 'function') fetchAllUsers();
     }
     
-    if (targetPageId === 'command-generation-page') { 
-        const tab = document.getElementById('admin-view-requests-tab');
-        if(tab) tab.click(); 
+    if (targetPageId === 'command-generation-page') {
+        const tab = document.getElementById('admin-view-dashboard-tab');
+        if (tab) tab.click();
     }
 }
 
@@ -513,6 +513,7 @@ document.querySelectorAll('input[name="modal_memo_type"]').forEach(radio => radi
     // --- Admin Tabs (Color-coded strip) ---
     function switchAdminTab(tabName) {
         const cfg = {
+            dashboard:    { btn: 'admin-view-dashboard-tab',    active: 'tab-dashboard', view: 'admin-dashboard-view'    },
             requests:     { btn: 'admin-view-requests-tab',     active: 'tab-requests',  view: 'admin-requests-view'     },
             memos:        { btn: 'admin-view-memos-tab',        active: 'tab-memos',     view: 'admin-memos-view'        },
             announcement: { btn: 'admin-view-announcement-tab', active: 'tab-announce',  view: 'admin-announcement-view' },
@@ -522,12 +523,33 @@ document.querySelectorAll('input[name="modal_memo_type"]').forEach(radio => radi
             const view = document.getElementById(c.view);
             const isActive = name === tabName;
             if (btn) {
-                btn.classList.remove('tab-requests', 'tab-memos', 'tab-announce', 'tab-inactive');
-                btn.classList.add(isActive ? c.active : 'tab-inactive');
+                btn.classList.remove('tab-dashboard', 'tab-requests', 'tab-memos', 'tab-announce', 'tab-inactive');
+                if (isActive) {
+                    if (name === 'dashboard') {
+                        btn.style.background = 'linear-gradient(135deg,#6366f1,#4f46e5)';
+                        btn.style.color = '#fff';
+                    } else {
+                        btn.style.background = '';
+                        btn.style.color = '';
+                        btn.classList.add(c.active);
+                    }
+                } else {
+                    btn.style.background = '';
+                    btn.style.color = '';
+                    btn.classList.add('tab-inactive');
+                }
             }
             if (view) view.classList.toggle('hidden', !isActive);
         });
     }
+
+    // expose ให้ admin.js เรียกได้
+    window.switchAdminTab = switchAdminTab;
+
+    document.getElementById('admin-view-dashboard-tab')?.addEventListener('click', async () => {
+        switchAdminTab('dashboard');
+        if (typeof loadAdminDashboard === 'function') await loadAdminDashboard();
+    });
 
     document.getElementById('admin-view-requests-tab')?.addEventListener('click', async () => {
         switchAdminTab('requests');
@@ -537,6 +559,22 @@ document.querySelectorAll('input[name="modal_memo_type"]').forEach(radio => radi
     document.getElementById('admin-view-memos-tab')?.addEventListener('click', async () => {
         switchAdminTab('memos');
         await fetchAllMemos();
+    });
+
+    // ── ผูก search requests กับ filter ──
+    document.getElementById('admin-search-requests')?.addEventListener('input', () => {
+        const term = (document.getElementById('admin-search-requests')?.value || '').toLowerCase().trim();
+        if (typeof allRequestsCache === 'undefined' || !allRequestsCache) return;
+        const filtered = term
+            ? allRequestsCache.filter(r =>
+                (r.id            || '').toLowerCase().includes(term) ||
+                (r.requesterName || '').toLowerCase().includes(term) ||
+                (r.purpose       || '').toLowerCase().includes(term) ||
+                (r.location      || '').toLowerCase().includes(term) ||
+                (r.status        || '').toLowerCase().includes(term) ||
+                (r.docStatus     || '').toLowerCase().includes(term))
+            : allRequestsCache;
+        if (typeof renderAdminRequestsList === 'function') renderAdminRequestsList(filtered);
     });
 
     // ── ผูก search memo กับ filter ──

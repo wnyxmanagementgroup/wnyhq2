@@ -24,10 +24,14 @@ async function fetchAllRequestsForCommand() {
         const container = document.getElementById('admin-requests-list');
         if (container) {
             container.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-10">
-                    <span class="loader mb-3"></span>
-                    <p class="text-gray-500 animate-pulse">กำลังโหลดข้อมูลคำขอทั้งหมด...</p>
-                </div>`;
+                <tr>
+                    <td colspan="9" class="text-center py-12">
+                        <div class="flex flex-col items-center justify-center gap-2">
+                            <span class="loader"></span>
+                            <p class="text-gray-500 animate-pulse mt-2">กำลังโหลดข้อมูลคำขอทั้งหมด...</p>
+                        </div>
+                    </td>
+                </tr>`;
         }
 
         // 3. ★★★ รอให้ Firebase Auth พร้อมใช้งาน (แก้ปัญหา Rules Block) ★★★
@@ -121,6 +125,7 @@ async function fetchAllRequestsForCommand() {
 async function fetchAllMemos() {
     try {
         if (!checkAdminAccess()) return;
+        if (typeof ensureFirebaseAuth === 'function') await ensureFirebaseAuth();
 
         // ดึงข้อมูล 2 แหล่งพร้อมกัน: GAS API + Firestore requests
         const [result, fbSnapshot] = await Promise.all([
@@ -247,6 +252,7 @@ async function handleAdminGenerateCommand() {
     };
     
     toggleLoader('admin-generate-command-button', true);
+    showSavingOverlay('กำลังสร้างเอกสารคำสั่ง...');
     try {
         const { pdfBlob, docxBlob } = await generateOfficialPDF(requestData);
         window.open(URL.createObjectURL(pdfBlob), '_blank');
@@ -308,6 +314,7 @@ async function handleAdminGenerateCommand() {
         showAlert('แจ้งเตือน', 'การบันทึกขัดข้อง: ' + error.message);
     } finally {
         toggleLoader('admin-generate-command-button', false);
+        hideSavingOverlay();
     }
 }
 
@@ -383,51 +390,51 @@ function renderAdminRequestsList(requests) {
         // --- หนังสือส่ง ---
         const dispatchUrl = request.dispatchBookUrl || request.dispatchBookPdfUrl;
         const dispatchBtn = dispatchUrl
-            ? `<div class="flex gap-1">
-                   <a href="${dispatchUrl}" target="_blank" class="btn btn-xs bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200">📦 ดู</a>
-                   <button onclick="openDispatchModal('${safeId}')" class="btn btn-xs bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100">✏️</button>
+            ? `<div class="flex gap-1 w-full">
+                   <a href="${dispatchUrl}" target="_blank" class="btn btn-xs flex-1 text-center" style="background:linear-gradient(135deg,#a855f7,#9333ea);color:white;">📦 ดู</a>
+                   <button onclick="openDispatchModal('${safeId}')" class="btn btn-xs px-2" style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;">✏️</button>
                </div>`
-            : `<button onclick="openDispatchModal('${safeId}')" class="btn btn-xs bg-purple-500 hover:bg-purple-600 text-white">📦 ออกหนังสือส่ง</button>`;
+            : `<button onclick="openDispatchModal('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#a855f7,#9333ea);color:white;">📦 ออกหนังสือส่ง</button>`;
 
         // --- ส่งบันทึก ---
         const adminMemoBtn = !request.completedMemoUrl
-            ? `<button onclick="openSendMemoFromList('${safeId}')" class="btn btn-xs bg-orange-500 hover:bg-orange-600 text-white animate-pulse">📤 ส่งบันทึกแทน</button>`
-            : `<a href="${request.completedMemoUrl}" target="_blank" class="btn btn-xs bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200">📄 ดูบันทึก</a>`;
+            ? `<button onclick="openSendMemoFromList('${safeId}')" class="btn btn-xs w-full animate-pulse" style="background:linear-gradient(135deg,#fb923c,#f97316);color:white;">📤 ส่งบันทึกแทน</button>`
+            : `<a href="${request.completedMemoUrl}" target="_blank" class="btn btn-xs w-full" style="background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;">📄 ดูบันทึก</a>`;
 
         // --- PDF ต้นฉบับ ---
         const draftPdfUrl = request.currentPdfUrl || request.pdfUrl || request.memoPdfUrl;
         const draftPdfBtn = draftPdfUrl
-            ? `<a href="${draftPdfUrl}" target="_blank" class="btn btn-xs bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200">🖨️ PDF</a>`
+            ? `<a href="${draftPdfUrl}" target="_blank" class="btn btn-xs" style="background:#e0e7ff;color:#4338ca;border:1px solid #c7d2fe;">🖨️ PDF</a>`
             : '';
 
         // --- ปุ่มคำสั่ง ---
         let commandActionBtn = '';
         if (request.commandPdfUrl) {
             commandActionBtn = `
-                <a href="${request.commandPdfUrl}" target="_blank" class="btn btn-xs bg-green-600 hover:bg-green-700 text-white">📄 ดูคำสั่ง</a>
-                <button onclick="openAdminGenerateCommand('${safeId}')" class="btn btn-xs bg-yellow-500 hover:bg-yellow-600 text-white">✏️ แก้ไข</button>`;
+                <a href="${request.commandPdfUrl}" target="_blank" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#34d399,#10b981);color:white;">📄 ดูคำสั่ง</a>
+                <button onclick="openAdminGenerateCommand('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:white;">✏️ แก้ไขคำสั่ง</button>`;
         } else {
             commandActionBtn = `
                 ${adminMemoBtn}
-                <button onclick="openAdminGenerateCommand('${safeId}')" class="btn btn-xs bg-green-500 hover:bg-green-600 text-white">✅ ออกคำสั่ง (${peopleCategory})</button>`;
+                <button onclick="openAdminGenerateCommand('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#34d399,#10b981);color:white;">✅ ออกคำสั่ง (${peopleCategory})</button>`;
         }
 
         // สถานะ / ป้าย
         const statusBadge = request.commandPdfUrl
-            ? `<span class="inline-block px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-medium">✅ มีคำสั่ง</span>`
-            : `<span class="inline-block px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700 font-medium">⏳ รอออกคำสั่ง</span>`;
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;">✅ มีคำสั่ง</span>`
+            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#fef9c3;color:#b45309;border:1px solid #fde68a;">⏳ รอออกคำสั่ง</span>`;
         const dispatchBadge = dispatchUrl
-            ? `<span class="inline-block px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700">📦 หนังสือส่ง</span>`
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#f3e8ff;color:#7e22ce;border:1px solid #e9d5ff;">📦 หนังสือส่ง</span>`
             : '';
 
-        // สถานะหลัก + docStatus (แสดงข้อมูลจริง)
+        // สถานะหลัก + docStatus
         const mainStatus   = request.status    || '';
         const docStatus    = request.docStatus || '';
         const mainStatusBadge = mainStatus
-            ? `<span class="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 border border-gray-200 font-medium max-w-[130px] truncate" title="${escapeHtml(mainStatus)}">${escapeHtml(mainStatus)}</span>`
+            ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium max-w-[140px] truncate" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;" title="${escapeHtml(mainStatus)}">${escapeHtml(mainStatus)}</span>`
             : '';
         const docStatusBadge = docStatus
-            ? `<span class="inline-block px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-600 border border-indigo-100 font-mono text-[10px] max-w-[130px] truncate" title="${escapeHtml(docStatus)}">${escapeHtml(docStatus)}</span>`
+            ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs max-w-[140px] truncate" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;font-size:0.65rem;" title="${escapeHtml(docStatus)}">${escapeHtml(docStatus)}</span>`
             : '';
 
         // safe values สำหรับส่งเข้า onclick (escape single-quotes)
@@ -437,36 +444,41 @@ function renderAdminRequestsList(requests) {
         const rowClass = request.commandPdfUrl ? 'row-green' : '';
 
         return `
-        <tr class="${rowClass}">
-            <td>
-                <div class="font-bold text-indigo-700 text-sm">${safeId}</div>
-                <div class="text-xs text-gray-400 mt-0.5">${peopleCategory}</div>
+        <tr class="${rowClass}" data-id="${safeId}">
+            <td class="text-center">
+                <input type="checkbox" class="bulk-checkbox w-4 h-4 rounded accent-indigo-600 cursor-pointer" value="${safeId}" onchange="updateBulkToolbar()">
             </td>
-            <td><div class="font-medium text-gray-800 text-sm">${safeName}</div></td>
+            <td>
+                <div class="font-bold text-indigo-700 text-sm leading-tight">${safeId}</div>
+                <div class="text-xs text-gray-400 mt-0.5 font-medium">${peopleCategory}</div>
+            </td>
+            <td>
+                <div class="font-semibold text-gray-800 text-sm leading-tight">${safeName}</div>
+            </td>
             <td style="max-width:200px">
-                <div class="text-gray-700 text-sm" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${safePurpose}</div>
+                <div class="text-gray-700 text-sm leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${safePurpose}</div>
                 <div class="text-gray-400 text-xs mt-0.5">📍 ${safeLocation}</div>
             </td>
             <td class="whitespace-nowrap text-xs text-gray-600">${dateHtml}</td>
             <td class="text-center">
-                <span class="text-base font-bold text-indigo-600">${totalPeople}</span>
+                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold" style="background:#eef2ff;color:#4338ca;">${totalPeople}</span>
             </td>
             <td class="text-center">${expenseCell}</td>
             <td>
-                <div class="flex flex-wrap gap-1 mb-1">${statusBadge}${dispatchBadge}</div>
+                <div class="flex flex-wrap gap-1 mb-1.5">${statusBadge}${dispatchBadge}</div>
                 <div class="flex flex-wrap gap-1 mb-1">${mainStatusBadge}</div>
-                <div class="flex flex-wrap gap-1">${docStatusBadge}${draftPdfBtn}</div>
+                <div class="flex flex-wrap gap-1 items-center">${docStatusBadge}${draftPdfBtn}</div>
             </td>
             <td>
-                <div class="flex flex-col gap-1.5 items-center" style="min-width:110px">
+                <div class="flex flex-col gap-1.5 items-stretch" style="min-width:128px">
                     ${commandActionBtn}
                     ${dispatchBtn}
-                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;border:none;">📅 กำหนดการเดินทาง</button>` : ''}
+                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;">📅 กำหนดการเดินทาง</button>` : ''}
                     <button onclick="openCustomStatusModal('${safeId}', '${safeStatus}', '${safeDocStatus}')"
-                        class="btn btn-xs bg-violet-100 hover:bg-violet-200 text-violet-700 border border-violet-200 w-full">
+                        class="btn btn-xs w-full" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">
                         ✏️ เปลี่ยนสถานะ
                     </button>
-                    <button onclick="deleteRequestByAdmin('${safeId}')" class="text-xs text-red-400 hover:text-red-600 mt-1">🗑️ ลบ</button>
+                    <button onclick="deleteRequestByAdmin('${safeId}')" class="btn btn-xs w-full mt-0.5" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;">🗑️ ลบ</button>
                 </div>
             </td>
         </tr>`;
@@ -1008,7 +1020,7 @@ async function generateOfficialPDF(requestData) {
         }
 
         // --- 3. โหลดและ Render Template ---
-        const response = await fetch(`./${templateFilename}`); 
+        const response = await fetch(`../${templateFilename}`);
         if (!response.ok) throw new Error(`ไม่พบไฟล์แม่แบบ "${templateFilename}"`);
         const content = await response.arrayBuffer();
 
@@ -1650,6 +1662,7 @@ async function handleAdminMemoActionSubmit(e) {
     const dispatchBookFile     = document.getElementById('admin-dispatch-book-file').files[0];
 
     toggleLoader('admin-memo-submit-button', true);
+    showSavingOverlay('กำลังอัปโหลดไฟล์และบันทึกข้อมูล...');
 
     try {
         const refNumber = document.getElementById('admin-memo-refnumber')?.value || memoId;
@@ -1742,6 +1755,7 @@ async function handleAdminMemoActionSubmit(e) {
         showAlert('ผิดพลาด', error.message);
     } finally {
         toggleLoader('admin-memo-submit-button', false);
+        hideSavingOverlay();
     }
 }
 
@@ -2303,6 +2317,278 @@ async function handleSaveAnnouncement(e) {
     } finally {
         toggleLoader('save-announcement-btn', false);
     }
+}
+
+// ============================================================
+// 🔴 HIGH PRIORITY: ADMIN DASHBOARD + PIPELINE + BULK ACTIONS
+// ============================================================
+
+// --- ADMIN DASHBOARD ---
+
+async function loadAdminDashboard() {
+    if (!checkAdminAccess()) return;
+
+    // ใช้ cache ถ้ามีอยู่แล้ว ไม่ต้องดึงใหม่
+    let requests = allRequestsCache || [];
+    if (!requests.length) {
+        try {
+            const res = await apiCall('GET', 'getAllRequests');
+            requests = res.status === 'success' ? (res.data || []) : [];
+            allRequestsCache = requests;
+        } catch (e) {
+            console.warn('Dashboard: failed to load requests', e.message);
+        }
+    }
+
+    _renderKpiCards(requests);
+    _renderPipeline(requests);
+    _renderOverdueList(requests);
+    _renderRecentList(requests);
+}
+
+function _renderKpiCards(requests) {
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+
+    const pendingCommand = requests.filter(r => !r.commandPdfUrl && r.status !== 'เสร็จสิ้น').length;
+    const waitingSaraban = requests.filter(r => (r.docStatus || '').includes('saraban')).length;
+    const waitingDirector = requests.filter(r => (r.docStatus || '').includes('director')).length;
+    const doneThisMonth = requests.filter(r => {
+        if (r.status !== 'เสร็จสิ้น') return false;
+        const d = new Date(r.lastUpdated || r.timestamp || 0);
+        return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    }).length;
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('kpi-pending-command', pendingCommand);
+    set('kpi-waiting-saraban', waitingSaraban);
+    set('kpi-waiting-director', waitingDirector);
+    set('kpi-done', doneThisMonth);
+}
+
+function _renderPipeline(requests) {
+    const container = document.getElementById('admin-pipeline');
+    if (!container) return;
+
+    const stages = [
+        { label: 'รอออกคำสั่ง',   mode: 'pending_command',  filter: r => !r.commandPdfUrl && r.status !== 'เสร็จสิ้น', color: 'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200' },
+        { label: 'รอหัวหน้ากลุ่ม', mode: 'waiting_head',     filter: r => (r.docStatus || '').startsWith('waiting_head'), color: 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200' },
+        { label: 'รอรองผอ.',       mode: 'waiting_deputy',   filter: r => (r.docStatus || '').startsWith('waiting_dep'), color: 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200' },
+        { label: 'รอสารบรรณ',     mode: 'waiting_saraban',  filter: r => (r.docStatus || '').includes('saraban'), color: 'bg-purple-100 text-purple-700 border-purple-300 hover:bg-purple-200' },
+        { label: 'รอผู้อำนวยการ', mode: 'waiting_director', filter: r => (r.docStatus || '').includes('director'), color: 'bg-pink-100 text-pink-700 border-pink-300 hover:bg-pink-200' },
+        { label: 'เสร็จสิ้น',     mode: 'completed',        filter: r => r.status === 'เสร็จสิ้น', color: 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' },
+    ];
+
+    const arrow = `<span class="text-gray-300 text-xl font-light self-center">›</span>`;
+
+    container.innerHTML = stages.map((s, i) => {
+        const count = requests.filter(s.filter).length;
+        const pill = `<div class="flex flex-col items-center border rounded-xl px-4 py-2 ${s.color} min-w-[90px] text-center cursor-pointer transition select-none" onclick="filterAdminRequestsBy('${s.mode}')" title="คลิกเพื่อดูรายการ">
+            <span class="text-2xl font-extrabold">${count}</span>
+            <span class="text-xs font-medium mt-0.5 leading-tight">${s.label}</span>
+        </div>`;
+        return i < stages.length - 1 ? pill + arrow : pill;
+    }).join('');
+}
+
+function _renderOverdueList(requests) {
+    const container = document.getElementById('admin-overdue-list');
+    if (!container) return;
+
+    const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    const overdue = requests.filter(r => {
+        if (r.status === 'เสร็จสิ้น') return false;
+        const ts = r.timestamp?.seconds ? r.timestamp.seconds * 1000 : new Date(r.timestamp || 0).getTime();
+        return ts < threeDaysAgo && ts > 0;
+    }).slice(0, 8);
+
+    if (!overdue.length) {
+        container.innerHTML = `<div class="text-green-600 text-sm flex items-center gap-2">✅ ไม่มีเอกสารค้างเกิน 3 วัน</div>`;
+        return;
+    }
+
+    container.innerHTML = overdue.map(r => {
+        const ts = r.timestamp?.seconds ? r.timestamp.seconds * 1000 : new Date(r.timestamp || 0).getTime();
+        const days = Math.floor((Date.now() - ts) / 86400000);
+        const safeId = escapeHtml(r.id || '—');
+        return `<div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 last:border-0 rounded-lg px-2 hover:bg-red-50 cursor-pointer transition" onclick="filterByStatus('${safeId}');switchAdminTab('requests');" title="คลิกเพื่อดูรายการ">
+            <div>
+                <span class="font-bold text-indigo-600">${safeId}</span>
+                <span class="text-gray-500 ml-1">${escapeHtml((r.requesterName || '').substring(0,14))}</span>
+            </div>
+            <span class="text-red-500 font-semibold whitespace-nowrap">${days} วัน</span>
+        </div>`;
+    }).join('');
+}
+
+function _renderRecentList(requests) {
+    const container = document.getElementById('admin-recent-list');
+    if (!container) return;
+
+    const sorted = [...requests].sort((a, b) => {
+        const ta = a.timestamp?.seconds ? a.timestamp.seconds * 1000 : new Date(a.timestamp || 0).getTime();
+        const tb = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : new Date(b.timestamp || 0).getTime();
+        return tb - ta;
+    }).slice(0, 8);
+
+    if (!sorted.length) {
+        container.innerHTML = `<div class="text-gray-400 text-sm">ยังไม่มีข้อมูล</div>`;
+        return;
+    }
+
+    container.innerHTML = sorted.map(r => {
+        const safeId = escapeHtml(r.id || '—');
+        return `<div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 last:border-0 rounded-lg px-2 hover:bg-indigo-50 cursor-pointer transition" onclick="filterByStatus('${safeId}');switchAdminTab('requests');" title="คลิกเพื่อดูรายการ">
+            <div>
+                <span class="font-bold text-indigo-600">${safeId}</span>
+                <span class="text-gray-500 ml-1 text-xs">${escapeHtml((r.requesterName || '').substring(0,16))}</span>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full ${r.status === 'เสร็จสิ้น' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}">${escapeHtml(r.status || '—')}</span>
+        </div>`;
+    }).join('');
+}
+
+// --- BULK ACTIONS ---
+
+function updateBulkToolbar() {
+    const checked = document.querySelectorAll('.bulk-checkbox:checked');
+    const toolbar = document.getElementById('bulk-toolbar');
+    const countEl = document.getElementById('bulk-count');
+    const selectAll = document.getElementById('bulk-select-all');
+
+    if (!toolbar) return;
+    if (checked.length > 0) {
+        toolbar.classList.remove('hidden');
+        if (countEl) countEl.textContent = checked.length;
+    } else {
+        toolbar.classList.add('hidden');
+    }
+
+    const all = document.querySelectorAll('.bulk-checkbox');
+    if (selectAll) selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+}
+
+function toggleSelectAll(masterCb) {
+    document.querySelectorAll('.bulk-checkbox').forEach(cb => { cb.checked = masterCb.checked; });
+    updateBulkToolbar();
+}
+
+function clearBulkSelection() {
+    document.querySelectorAll('.bulk-checkbox').forEach(cb => { cb.checked = false; });
+    const selectAll = document.getElementById('bulk-select-all');
+    if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+    updateBulkToolbar();
+}
+
+function _getSelectedIds() {
+    return [...document.querySelectorAll('.bulk-checkbox:checked')].map(cb => cb.value);
+}
+
+function bulkExportCSV() {
+    const ids = _getSelectedIds();
+    if (!ids.length) return;
+
+    const rows = (allRequestsCache || []).filter(r => ids.includes(r.id));
+    if (!rows.length) return showAlert('ผิดพลาด', 'ไม่พบข้อมูลที่เลือก');
+
+    const headers = ['เลขที่', 'ชื่อผู้ขอ', 'เรื่อง', 'สถานที่', 'วันเริ่ม', 'วันสิ้นสุด', 'สถานะ', 'งบประมาณ'];
+    const csvRows = [headers.join(',')];
+    rows.forEach(r => {
+        csvRows.push([
+            r.id || '', r.requesterName || '', r.purpose || '',
+            r.location || '', r.startDate || '', r.endDate || '',
+            r.status || '', r.totalExpense || '0'
+        ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    });
+
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `คำขอไปราชการ_${new Date().toLocaleDateString('th-TH')}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    clearBulkSelection();
+}
+
+function bulkChangeStatus() {
+    const ids = _getSelectedIds();
+    if (!ids.length) return;
+    const countEl = document.getElementById('bulk-status-count');
+    if (countEl) countEl.textContent = ids.length;
+    document.getElementById('bulk-status-modal').style.display = 'flex';
+}
+
+async function bulkChangeStatusConfirm() {
+    const ids = _getSelectedIds();
+    const newStatus = document.getElementById('bulk-status-select').value;
+    if (!newStatus) return showAlert('ผิดพลาด', 'กรุณาเลือกสถานะ');
+
+    document.getElementById('bulk-status-modal').style.display = 'none';
+
+    let done = 0, failed = 0;
+    for (const id of ids) {
+        try {
+            await apiCall('POST', 'updateRequest', { id, status: newStatus });
+            if (typeof db !== 'undefined') {
+                const safeId = id.replace(/[\/\\:\.]/g, '-');
+                await db.collection('requests').doc(safeId).set({ status: newStatus }, { merge: true });
+            }
+            done++;
+        } catch (e) { failed++; }
+    }
+
+    clearRequestsCache();
+    clearBulkSelection();
+    showAlert('สำเร็จ', `เปลี่ยนสถานะแล้ว ${done} รายการ${failed ? ` (ล้มเหลว ${failed})` : ''}`);
+    await fetchAllRequestsForCommand();
+}
+
+async function bulkGenerateCommand() {
+    const ids = _getSelectedIds();
+    if (!ids.length) return;
+
+    const confirmed = await showConfirm('ออกคำสั่ง', `ระบบจะเปิดหน้าออกคำสั่งให้ครบ ${ids.length} รายการทีละชุด กด "ตกลง" เพื่อเริ่ม`);
+    if (!confirmed) return;
+
+    clearBulkSelection();
+    openAdminGenerateCommand(ids[0]);
+}
+
+function filterByStatus(statusValue) {
+    const searchInput = document.getElementById('admin-search-requests');
+    if (searchInput) {
+        searchInput.value = statusValue;
+        searchInput.dispatchEvent(new Event('input'));
+    }
+}
+
+// กรองรายการตาม mode พิเศษ (ใช้กับ KPI cards / pipeline pills)
+function filterAdminRequestsBy(mode) {
+    if (!allRequestsCache) return;
+    const now = new Date();
+    const filters = {
+        'pending_command':  r => !r.commandPdfUrl && r.status !== 'เสร็จสิ้น',
+        'waiting_saraban':  r => (r.docStatus || '').includes('saraban'),
+        'waiting_director': r => (r.docStatus || '').includes('director'),
+        'waiting_head':     r => (r.docStatus || '').startsWith('waiting_head'),
+        'waiting_deputy':   r => (r.docStatus || '').startsWith('waiting_dep'),
+        'done_this_month':  r => {
+            if (r.status !== 'เสร็จสิ้น') return false;
+            const d = new Date(r.lastUpdated || r.timestamp || 0);
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        },
+        'completed':        r => r.status === 'เสร็จสิ้น',
+    };
+    const filterFn = filters[mode];
+    const filtered = filterFn ? allRequestsCache.filter(filterFn) : allRequestsCache;
+
+    // สลับไป tab คำขอแล้ว render ทันที
+    if (typeof switchAdminTab === 'function') switchAdminTab('requests');
+    renderAdminRequestsList(filtered);
+
+    // ล้าง search input
+    const searchInput = document.getElementById('admin-search-requests');
+    if (searchInput) searchInput.value = '';
 }
 // ในไฟล์ js/admin.js
 

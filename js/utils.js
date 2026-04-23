@@ -17,11 +17,27 @@ function clearRequestsCache() {
 }
 // ดึง Firebase ID Token สำหรับยืนยันตัวตนกับ GAS
 // คืนค่า null ถ้า Firebase ยังไม่พร้อม หรือยังไม่ได้ login
+// cache token 50 นาที (token จริงหมดอายุ 60 นาที)
+let _cachedIdToken = null;
+let _cachedIdTokenExp = 0;
+
 async function getFirebaseIdToken() {
     try {
-        if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
-            return await firebase.auth().currentUser.getIdToken();
+        if (typeof firebase === 'undefined') return null;
+
+        // ใช้ cache ถ้ายังไม่หมดอายุ
+        if (_cachedIdToken && Date.now() < _cachedIdTokenExp) {
+            return _cachedIdToken;
         }
+
+        const auth = firebase.auth();
+        if (!auth.currentUser) {
+            await auth.signInAnonymously();
+        }
+        const token = await auth.currentUser.getIdToken();
+        _cachedIdToken = token;
+        _cachedIdTokenExp = Date.now() + 50 * 60 * 1000; // 50 นาที
+        return token;
     } catch (e) {
         console.warn('⚠️ getIdToken failed:', e.message);
     }
@@ -131,14 +147,9 @@ function showConfirm(title, message) {
 
 function toggleLoader(buttonId, show) {
     const button = document.getElementById(buttonId);
-    if (!button) {
-        // console.warn(`Button with id '${buttonId}' not found`);
-        return;
-    }
-    
+    if (!button) return;
     const loader = button.querySelector('.loader');
     const text = button.querySelector('span');
-    
     if (show) {
         if (loader) loader.classList.remove('hidden');
         if (text) text.classList.add('hidden');
@@ -147,6 +158,47 @@ function toggleLoader(buttonId, show) {
         if (loader) loader.classList.add('hidden');
         if (text) text.classList.remove('hidden');
         button.disabled = false;
+    }
+}
+
+// ─── Saving Overlay ────────────────────────────────────────────────────────
+let _isSaving = false;
+
+function showSavingOverlay(message) {
+    _isSaving = true;
+    const overlay = document.getElementById('saving-overlay');
+    if (!overlay) return;
+    const msg = overlay.querySelector('#saving-overlay-message');
+    if (msg) msg.textContent = message || 'กำลังบันทึกข้อมูล...';
+    overlay.classList.remove('hidden');
+}
+
+function hideSavingOverlay() {
+    _isSaving = false;
+    const overlay = document.getElementById('saving-overlay');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+window.addEventListener('beforeunload', (e) => {
+    if (_isSaving) {
+        e.preventDefault();
+        e.returnValue = 'กำลังบันทึกข้อมูลอยู่ กรุณาอย่าปิดหน้าต่างนี้';
+    }
+});
+
+// ปุ่มแบบ inline (ไม่มี id) — ส่ง element โดยตรง เช่น onclick="setButtonLoading(this,true)"
+function setButtonLoading(el, loading) {
+    if (!el) return;
+    if (loading) {
+        el.disabled = true;
+        el.dataset.origHtml = el.innerHTML;
+        el.innerHTML = `<span class="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin align-middle"></span>`;
+    } else {
+        el.disabled = false;
+        if (el.dataset.origHtml) {
+            el.innerHTML = el.dataset.origHtml;
+            delete el.dataset.origHtml;
+        }
     }
 }
 

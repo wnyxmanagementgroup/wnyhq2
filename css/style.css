@@ -300,11 +300,11 @@ div#requests-list > div:hover, div#admin-requests-list > div:hover {
 :root {
   --sidebar-width: 248px;
   --sidebar-collapsed-width: 64px;
-  --sidebar-bg: linear-gradient(180deg, #1a2c4e 0%, #1e3460 55%, #243d72 100%);
-  --sidebar-text: rgba(255,255,255,0.68);
-  --sidebar-active-bg: rgba(255,255,255,0.1);
-  --sidebar-hover-bg: rgba(255,255,255,0.07);
-  --sidebar-accent: #7bb8f5;
+  --sidebar-bg: linear-gradient(180deg, #3730a3 0%, #4338ca 50%, #4f46e5 100%);
+  --sidebar-text: rgba(255,255,255,0.80);
+  --sidebar-active-bg: rgba(255,255,255,0.16);
+  --sidebar-hover-bg: rgba(255,255,255,0.10);
+  --sidebar-accent: #a5b4fc;
   --topbar-height: 60px;
   --sb-transition: 0.22s cubic-bezier(0.4,0,0.2,1);
 }
@@ -346,7 +346,7 @@ div#requests-list > div:hover, div#admin-requests-list > div:hover {
     align-items: center;
     gap: 12px;
     padding: 18px 16px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid rgba(255,255,255,0.15);
     min-height: 72px;
     flex-shrink: 0;
 }
@@ -355,6 +355,9 @@ div#requests-list > div:hover, div#admin-requests-list > div:hover {
     height: 38px;
     border-radius: 10px;
     flex-shrink: 0;
+    object-fit: contain;
+    background: rgba(255,255,255,0.12);
+    padding: 2px;
 }
 .sidebar-brand-text {
     color: rgba(255,255,255,0.95);
@@ -735,3 +738,191 @@ div#admin-requests-list > div:hover {
     width: 100%;
 }
 .btn-travel-schedule:hover { opacity: 0.85; }
+
+/* ═══════════════════════════════════════════════════════════
+   ENHANCED UI v2.0 — Buttons, Tables, Badges
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Buttons: base override ── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    padding: 0.55rem 1.2rem;
+    border-radius: 0.65rem;
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    border: none;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+.btn:disabled { opacity: 0.55 !important; cursor: not-allowed !important; transform: none !important; box-shadow: none !important; }
+
+/* ── btn-primary: indigo gradient ── */
+.btn-primary {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
+}
+.btn-primary:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    box-shadow: 0 5px 16px rgba(79, 70, 229, 0.38);
+    transform: translateY(-1px);
+}
+
+/* ── btn-success: emerald gradient ── */
+.btn-success {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.28);
+}
+.btn-success:hover {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 5px 16px rgba(16, 185, 129, 0.38);
+    transform: translateY(-1px);
+}
+
+/* ── btn-danger: red gradient ── */
+.btn-danger {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+}
+.btn-danger:hover {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 5px 16px rgba(239, 68, 68, 0.35);
+    transform: translateY(-1px);
+}
+
+/* ── btn-warning: amber gradient ── */
+.btn-warning {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.28);
+}
+.btn-warning:hover {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    box-shadow: 0 5px 16px rgba(245, 158, 11, 0.38);
+    transform: translateY(-1px);
+}
+
+/* ── btn-sm ── */
+.btn-sm {
+    padding: 0.38rem 0.85rem;
+    font-size: 0.82rem;
+    border-radius: 0.55rem;
+}
+
+/* ── btn-xs: pill shape สำหรับปุ่มในตาราง ── */
+.btn-xs {
+    padding: 0.22rem 0.7rem;
+    font-size: 0.7rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-xs:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+}
+
+/* ── Enhanced Data Table ── */
+.table-wrapper {
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+}
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    table-layout: auto;
+}
+
+/* Table header gradient */
+.data-table thead tr {
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+}
+.data-table th {
+    padding: 0.85rem 0.875rem;
+    text-align: left;
+    font-weight: 700;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    border-bottom: 2px solid #c7d2fe;
+    color: #4338ca;
+}
+
+/* Table body rows */
+.data-table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.data-table tbody tr:hover {
+    background: linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.01) 100%) !important;
+    box-shadow: inset 3px 0 0 #6366f1;
+}
+.data-table tbody tr:last-child { border-bottom: none; }
+.data-table td {
+    padding: 0.75rem 0.875rem;
+    vertical-align: middle;
+}
+
+/* Row color variants — softer pastels */
+.data-table .row-green  { background-color: rgba(167, 243, 208, 0.25); }
+.data-table .row-orange { background-color: rgba(254, 215, 170, 0.3); }
+.data-table .row-red    { background-color: rgba(254, 202, 202, 0.35); }
+.data-table .row-blue   { background-color: rgba(191, 219, 254, 0.25); }
+
+/* Last column min-width */
+.data-table th:last-child,
+.data-table td:last-child { min-width: 120px; }
+
+/* ── Status Badge Improvements ── */
+/* ทุก inline badge ใน table ให้มีขนาด/น้ำหนักที่สม่ำเสมอ */
+.data-table td span[class*="rounded-full"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    letter-spacing: 0.01em;
+}
+
+/* ── Bulk Toolbar ── */
+#bulk-toolbar {
+    border-radius: 0.875rem;
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    border: 1px solid #c7d2fe;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.1);
+}
+
+/* ── Admin Tab Strip: gradient active tabs ── */
+.admin-tab.tab-requests {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+}
+.admin-tab.tab-memos {
+    background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+    color: white;
+}
+.admin-tab.tab-announce {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white;
+}
+.admin-tab.tab-dashboard {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    color: white;
+}
+.admin-tab.tab-inactive:hover {
+    background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    color: #374151;
+}
