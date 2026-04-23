@@ -398,6 +398,23 @@ async function loadApprovalLinkManagement() {
         return;
     }
 
+    // ★★★ รอให้ Firebase Auth พร้อมใช้งาน (แก้ปัญหา Missing or insufficient permissions) ★★★
+    if (typeof firebase !== 'undefined' && !firebase.auth().currentUser) {
+        console.warn('⏳ loadApprovalLinkManagement: Waiting for Firebase Auth...');
+        await new Promise(resolve => {
+            const unsubscribe = firebase.auth().onAuthStateChanged(user => {
+                unsubscribe();
+                resolve(user);
+            });
+        });
+
+        if (!firebase.auth().currentUser) {
+            console.error('❌ loadApprovalLinkManagement: Not logged in (Firebase)');
+            container.innerHTML = '<p class="text-center text-red-500 py-8">⚠️ กรุณาเข้าสู่ระบบใหม่เพื่อใช้งานฟีเจอร์นี้</p>';
+            return;
+        }
+    }
+
     // Firestore "in" query รองรับสูงสุด 10 ค่า — แบ่ง 3 batch
     const batch1 = [
         'waiting_head_thai',     'waiting_head_foreign',  'waiting_head_science',
