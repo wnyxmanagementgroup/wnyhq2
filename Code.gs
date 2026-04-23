@@ -15,9 +15,6 @@ const PDF_FOLDER_ID = "1pGiVOigsZZqb-jOix2izMMl0AwzfS27Z";
 // ==================================================================
 // === MAIN HANDLERS ===
 // ==================================================================
-function testDrive() {
-  DriveApp.getRootFolder();
-}
 function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu("Admin Menu")
@@ -2346,10 +2343,15 @@ function sendCompletionEmail(requestId, username, status) {
 }
 
 function getOrCreateUserFolder(username) {
-  if (!username) return DriveApp.getFolderById(PDF_FOLDER_ID);
-  const parent = DriveApp.getFolderById(PDF_FOLDER_ID);
-  const folders = parent.getFoldersByName(username);
-  return folders.hasNext() ? folders.next() : parent.createFolder(username);
+  try {
+    if (!username) return DriveApp.getFolderById(PDF_FOLDER_ID);
+    const parent = DriveApp.getFolderById(PDF_FOLDER_ID);
+    const folders = parent.getFoldersByName(username);
+    return folders.hasNext() ? folders.next() : parent.createFolder(username);
+  } catch (e) {
+    Logger.log("getOrCreateUserFolder error: " + e.message);
+    throw new Error("ไม่สามารถเข้าถึงโฟลเดอร์ Drive ได้: " + e.message);
+  }
 }
 
 function deleteFileByUrl(url) {
