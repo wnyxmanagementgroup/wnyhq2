@@ -1076,24 +1076,29 @@ async function handleMemoSubmitFromModal(e) {
 
             // --- 2. รวมไฟล์และอัปโหลด (ถ้ามีไฟล์) ---
             if (filesToMerge.length > 0) {
-                // เปลี่ยนข้อความปุ่ม
-                const btn = document.getElementById('send-memo-submit-button');
-                const originalBtnText = btn.innerHTML;
-                btn.innerHTML = '<div class="loader"></div> กำลังรวมไฟล์ PDF...';
+                try {
+                    // เปลี่ยนข้อความปุ่ม
+                    const btn = document.getElementById('send-memo-submit-button');
+                    const originalBtnText = btn.innerHTML;
+                    btn.innerHTML = '<div class="loader"></div> กำลังรวมไฟล์ PDF...';
 
-                // เรียกฟังก์ชันรวมไฟล์
-                const mergedPdfBlob = await mergeFilesToSinglePDF(filesToMerge);
+                    // เรียกฟังก์ชันรวมไฟล์
+                    const mergedPdfBlob = await mergeFilesToSinglePDF(filesToMerge);
 
-                // --- อัปโหลดไฟล์ขึ้น Firebase Storage ---
-                btn.innerHTML = '<div class="loader"></div> กำลังอัปโหลด...';
-                finalFileUrlForAdmin = await uploadPdfToStorage(
-                    mergedPdfBlob, user.username,
-                    `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`
-                );
-                
-                // คืนค่าปุ่ม
-                btn.innerHTML = originalBtnText;
-
+                    // --- อัปโหลดไฟล์ขึ้น Firebase Storage ---
+                    btn.innerHTML = '<div class="loader"></div> กำลังอัปโหลด...';
+                    finalFileUrlForAdmin = await uploadPdfToStorage(
+                        mergedPdfBlob, user.username,
+                        `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`
+                    );
+                    
+                    // คืนค่าปุ่ม
+                    btn.innerHTML = originalBtnText;
+                } catch (mergeError) {
+                    console.error('Merge/Upload error:', mergeError);
+                    showAlert('คำเตือน', 'ไม่สามารถรวมหรืออัปโหลดไฟล์ได้: ' + mergeError.message + ' แต่จะส่งบันทึกโดยไม่มีไฟล์แนบ');
+                    finalFileUrlForAdmin = "";
+                }
             } else if (isAdmin) {
                 console.log("🛡️ Admin Bypass: ส่งบันทึกโดยไม่มีไฟล์แนบ");
                 // กรณี Admin ไม่แนบไฟล์ ระบบจะข้ามขั้นตอน Merge/Upload
@@ -1124,7 +1129,8 @@ async function handleMemoSubmitFromModal(e) {
             fileUrl: finalFileUrlForAdmin, // ถ้า Admin ไม่แนบ ค่านี้จะเป็น "" ซึ่ง backend ควรรับได้
             username: user.username, 
             memoType: memoType,
-            isAdminBypass: isAdmin // (Optional) ส่ง Flag บอก Backend ว่าเป็นการ Bypass
+            isAdminBypass: isAdmin, // (Optional) ส่ง Flag บอก Backend ว่าเป็นการ Bypass
+            forwardToStatus: forwardToStatus 
         });
 
         if (result.status === 'success') {

@@ -2,17 +2,22 @@ const SPREADSHEET_ID = "1qbZLB9tsumTwPuXZLXFdlwHKyl5g-rAsYvL1EsE_VN4";
 const DOC_TEMPLATE_ID = "1gdx9k0Vbea_CIwOJwB4l0E_H-ePDSz3qN_jmBv9VW6c";
 
 const COMMAND_TEMPLATE_SOLO_ID = "1tanbQgNp8NYCjUCDig0qvzpzZ4tFsT1Z_ru6qGn5O4g";
-const COMMAND_TEMPLATE_GROUP_SMALL_ID = "1jzJg_qwRYNa8wjb32PVgnVmrzkO0bNVNcOECb2a6u6Y";
-const COMMAND_TEMPLATE_GROUP_LARGE_ID = "10M8eolqah-8WXxHQ_q43NXiCOv0CkbnBxqq6AgfxtB0";
+const COMMAND_TEMPLATE_GROUP_SMALL_ID =
+  "1jzJg_qwRYNa8wjb32PVgnVmrzkO0bNVNcOECb2a6u6Y";
+const COMMAND_TEMPLATE_GROUP_LARGE_ID =
+  "10M8eolqah-8WXxHQ_q43NXiCOv0CkbnBxqq6AgfxtB0";
 
-const DISPATCH_BOOK_TEMPLATE_ID = "1lYNnhsDCuCMlHKh4ui_MbivRV-OFJ6icQFLu8fJdYP8";
+const DISPATCH_BOOK_TEMPLATE_ID =
+  "1lYNnhsDCuCMlHKh4ui_MbivRV-OFJ6icQFLu8fJdYP8";
 
 const PDF_FOLDER_ID = "1pGiVOigsZZqb-jOix2izMMl0AwzfS27Z";
 
 // ==================================================================
 // === MAIN HANDLERS ===
 // ==================================================================
-function testDrive() { DriveApp.getRootFolder(); }
+function testDrive() {
+  DriveApp.getRootFolder();
+}
 function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu("Admin Menu")
@@ -25,7 +30,7 @@ function doGet(e) {
     const action = e.parameter.action;
     const params = e.parameter;
     let data;
-    
+
     switch (action) {
       case "getUserRequests":
         data = getUserRequests(params.username);
@@ -40,7 +45,9 @@ function doGet(e) {
         data = getAllRequests();
         break;
       case "getMaxRequestSeq":
-        data = getMaxRequestSeq(params.year ? parseInt(params.year) : (new Date().getFullYear() + 543));
+        data = getMaxRequestSeq(
+          params.year ? parseInt(params.year) : new Date().getFullYear() + 543,
+        );
         break;
       case "getAllMemos":
         data = getAllMemos();
@@ -54,7 +61,7 @@ function doGet(e) {
       case "getAllDraftRequests":
         data = getAllDraftRequests();
         break;
-        
+
       // ★★★ เพิ่มส่วนนี้ (สำหรับดึงข้อมูลย้อนหลัง) ★★★
       case "getRequestsByYear":
         // รับค่าปี (พ.ศ.) และ Username
@@ -75,16 +82,15 @@ function doGet(e) {
         data = Utilities.base64Encode(file.getBlob().getBytes());
         break;
       }
-        
+
       default:
         throw new Error("Invalid GET action specified.");
     }
-    
+
     return createJsonResponse({
       status: "success",
       data: data,
     });
-    
   } catch (error) {
     Logger.log(`doGet Error: ${error.message}\n${error.stack}`);
     return createJsonResponse({
@@ -98,7 +104,7 @@ function doPost(e) {
   try {
     if (!e.postData || !e.postData.contents)
       throw new Error("No data received in POST request.");
-    
+
     const request = JSON.parse(e.postData.contents);
     const action = request.action;
     const payload = request.payload;
@@ -108,66 +114,127 @@ function doPost(e) {
     let result;
     switch (action) {
       // --- User Management ---
-      case "verifyCredentials": result = verifyUserCredentials(payload); break;
-      case "registerUser": result = registerUser(payload); break;
-      case "updateUserProfile": result = updateUserProfile(payload); break;
-      case "updatePassword": result = updatePassword(payload); break;
-      case "addUser": result = adminAddUser(payload); break;
-      case "deleteUser": result = deleteUser(payload); break;
-      case "importUsers": result = importUsers(payload); break;
-      case "forgotPassword": result = handleForgotPassword(payload); break;
-      case "adminUpdateUser": result = adminUpdateUser(payload); break;
+      case "verifyCredentials":
+        result = verifyUserCredentials(payload);
+        break;
+      case "registerUser":
+        result = registerUser(payload);
+        break;
+      case "updateUserProfile":
+        result = updateUserProfile(payload);
+        break;
+      case "updatePassword":
+        result = updatePassword(payload);
+        break;
+      case "addUser":
+        result = adminAddUser(payload);
+        break;
+      case "deleteUser":
+        result = deleteUser(payload);
+        break;
+      case "importUsers":
+        result = importUsers(payload);
+        break;
+      case "forgotPassword":
+        result = handleForgotPassword(payload);
+        break;
+      case "adminUpdateUser":
+        result = adminUpdateUser(payload);
+        break;
       // --- Request Management ---
-      case "createRequest": 
+      case "createRequest":
         // สร้างใหม่ หรือ บันทึกพร้อมสร้าง PDF
-        result = saveRequestAndGeneratePdf(payload); 
-        break;
-      
-      case "updateRequest": 
-        // อัปเดตข้อมูลลง Sheet (Lightweight) สำหรับ Sync จากหน้าเว็บ
-        result = updateRequest(payload); 
-        break;
-        
-      case "saveRequestAndGeneratePdf": 
-        // บังคับสร้าง PDF ใหม่
-        result = saveRequestAndGeneratePdf(payload); 
+        result = saveRequestAndGeneratePdf(payload);
         break;
 
-      case "deleteRequest": result = deleteRequest(payload); break;
-      case "softDeleteRequest": result = softDeleteRequest(payload); break;
-      case "restoreRequest": result = restoreRequest(payload); break;
-      case "getTrashItems": result = getTrashItems(payload); break;
-      case "updateRequestStatusCommand": result = updateRequestStatusCommand(payload); break;
+      case "updateRequest":
+        // อัปเดตข้อมูลลง Sheet (Lightweight) สำหรับ Sync จากหน้าเว็บ
+        result = updateRequest(payload);
+        break;
+
+      case "saveRequestAndGeneratePdf":
+        // บังคับสร้าง PDF ใหม่
+        result = saveRequestAndGeneratePdf(payload);
+        break;
+
+      case "deleteRequest":
+        result = deleteRequest(payload);
+        break;
+      case "softDeleteRequest":
+        result = softDeleteRequest(payload);
+        break;
+      case "restoreRequest":
+        result = restoreRequest(payload);
+        break;
+      case "getTrashItems":
+        result = getTrashItems(payload);
+        break;
+      case "updateRequestStatusCommand":
+        result = updateRequestStatusCommand(payload);
+        break;
 
       // --- Draft Management ---
-      case "saveDraftRequest": result = saveDraftRequest(payload); break;
-      case "generateDocumentFromDraft": result = generateDocumentFromDraft(payload); break;
+      case "saveDraftRequest":
+        result = saveDraftRequest(payload);
+        break;
+      case "generateDocumentFromDraft":
+        result = generateDocumentFromDraft(payload);
+        break;
 
       // --- Memo Management ---
-      case "deleteMemo": result = deleteMemo(payload); break;
-      case "uploadMemo": result = uploadMemo(payload); break;
-      case "updateMemoStatus": result = updateMemoStatus(payload); break;
+      case "deleteMemo":
+        result = deleteMemo(payload);
+        break;
+      case "uploadMemo":
+        result = uploadMemo(payload);
+        break;
+      case "updateMemoStatus":
+        result = updateMemoStatus(payload);
+        break;
 
       // --- Admin/Generation Actions ---
-      case "approveCommand": result = approveCommand(payload); break;
-      case "generateDispatchBook": result = generateDispatchBook(payload); break;
-      
+      case "approveCommand":
+        result = approveCommand(payload);
+        break;
+      case "generateDispatchBook":
+        result = generateDispatchBook(payload);
+        break;
+
       // --- Hybrid / File Handling ---
-      case "uploadGeneratedFile": result = uploadGeneratedFile(payload); break;
-      case "generateCommand": result = generateCommand(payload); break;
-      case "generateDispatch": result = generateDispatch(payload); break;
-      
+      case "uploadGeneratedFile":
+        result = uploadGeneratedFile(payload);
+        break;
+      case "generateCommand":
+        result = generateCommand(payload);
+        break;
+      case "generateDispatch":
+        result = generateDispatch(payload);
+        break;
+
       // --- System ---
-      case "doSystemBackup": result = doSystemBackup(); break;
+      case "doSystemBackup":
+        result = doSystemBackup();
+        break;
       case "sendCompletionEmail":
-        sendCompletionEmail(payload.requestId, payload.username, payload.status);
-        result = { status: "success", message: "ส่งอีเมลแจ้งเตือนเรียบร้อยแล้ว" };
+        sendCompletionEmail(
+          payload.requestId,
+          payload.username,
+          payload.status,
+        );
+        result = {
+          status: "success",
+          message: "ส่งอีเมลแจ้งเตือนเรียบร้อยแล้ว",
+        };
         break;
       // --- Firestore → Sheets Batch Sync (monthly backup) ---
-      case "batchSyncFromFirestore": result = batchSyncFromFirestore(payload); break;
+      case "batchSyncFromFirestore":
+        result = batchSyncFromFirestore(payload);
+        break;
 
       // --- Yearly Backup Email ---
-      case "sendYearlyBackupEmail": result = sendYearlyBackupEmail(payload); break;
+      case "sendYearlyBackupEmail":
+        result = sendYearlyBackupEmail(payload);
+        break;
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -183,7 +250,7 @@ function doPost(e) {
 
 function createJsonResponse(responseObject) {
   return ContentService.createTextOutput(
-    JSON.stringify(responseObject)
+    JSON.stringify(responseObject),
   ).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -199,8 +266,8 @@ function verifyUserCredentials(payload) {
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
 
-    const usernameCol = findColumnIndex(headers, "Username");   
-    const loginNameCol = findColumnIndex(headers, "LoginName"); 
+    const usernameCol = findColumnIndex(headers, "Username");
+    const loginNameCol = findColumnIndex(headers, "LoginName");
     const passwordCol = findColumnIndex(headers, "Password");
     const fullNameCol = findColumnIndex(headers, "FullName");
     const roleCol = findColumnIndex(headers, "Role");
@@ -214,16 +281,20 @@ function verifyUserCredentials(payload) {
       const row = data[i];
       const rowInternalId = String(row[usernameCol]).trim(); // ID หลัก
       const rowPassword = String(row[passwordCol]).trim();
-      
+
       // ดึง LoginName (ถ้ามี)
-      const rowLoginName = (loginNameCol > -1 && String(row[loginNameCol]).trim() !== "") 
-                           ? String(row[loginNameCol]).trim() 
-                           : "";
+      const rowLoginName =
+        loginNameCol > -1 && String(row[loginNameCol]).trim() !== ""
+          ? String(row[loginNameCol]).trim()
+          : "";
 
       // ★★★ แก้ไข Logic: เช็คว่าตรงกับ "ID หลัก" หรือ "LoginName" อย่างใดอย่างหนึ่ง ★★★
       // และรหัสผ่านต้องถูกต้อง
-      if ((userInput === rowInternalId || (rowLoginName !== "" && userInput === rowLoginName)) && rowPassword === password) {
-        
+      if (
+        (userInput === rowInternalId ||
+          (rowLoginName !== "" && userInput === rowLoginName)) &&
+        rowPassword === password
+      ) {
         return {
           status: "success",
           user: {
@@ -231,9 +302,9 @@ function verifyUserCredentials(payload) {
             loginName: rowLoginName || rowInternalId, // ส่งชื่อที่ใช้ล็อกอินกลับไปแสดงผล
             fullName: row[fullNameCol] || "",
             role: row[roleCol] || "user",
-            position: positionCol > -1 ? row[positionCol] : "",     // เพิ่มส่งค่าตำแหน่ง
-            department: departmentCol > -1 ? row[departmentCol] : "" // เพิ่มส่งค่าสังกัด
-          }
+            position: positionCol > -1 ? row[positionCol] : "", // เพิ่มส่งค่าตำแหน่ง
+            department: departmentCol > -1 ? row[departmentCol] : "", // เพิ่มส่งค่าสังกัด
+          },
         };
       }
     }
@@ -244,8 +315,10 @@ function verifyUserCredentials(payload) {
 }
 function registerUser(payload) {
   try {
-    const { username, password, fullName, email, position, department, role } = payload;
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Users");
+    const { username, password, fullName, email, position, department, role } =
+      payload;
+    const sheet =
+      SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Users");
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     const usernameCol = findColumnIndex(headers, "Username");
@@ -271,14 +344,18 @@ function registerUser(payload) {
     ]);
     return { status: "success", message: "ลงทะเบียนสำเร็จ" };
   } catch (error) {
-    return { status: "error", message: "เกิดข้อผิดพลาดในการลงทะเบียน: " + error.message };
+    return {
+      status: "error",
+      message: "เกิดข้อผิดพลาดในการลงทะเบียน: " + error.message,
+    };
   }
 }
 
 // ในไฟล์ Code.gs ค้นหาและแทนที่ฟังก์ชัน updateUserProfile ด้วยอันนี้
 
 function updateUserProfile(payload) {
-  const { username, loginName, fullName, email, position, department } = payload;
+  const { username, loginName, fullName, email, position, department } =
+    payload;
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Users");
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
@@ -303,37 +380,52 @@ function updateUserProfile(payload) {
 
       // เช็คว่าชื่อ LoginName ไปซ้ำกับคนอื่นไหม
       if (rowLoginName !== "" && rowLoginName === targetLoginName) {
-        return { status: "error", message: "ชื่อสำหรับล็อกอิน (LoginName) นี้มีผู้ใช้อื่นใช้งานแล้ว" };
+        return {
+          status: "error",
+          message: "ชื่อสำหรับล็อกอิน (LoginName) นี้มีผู้ใช้อื่นใช้งานแล้ว",
+        };
       }
-      
+
       // (Option เสริม) เช็คว่า LoginName ไปซ้ำกับ Username (ID) ของคนอื่นไหม
       if (rowUsername === targetLoginName) {
-         return { status: "error", message: "ชื่อสำหรับล็อกอินซ้ำกับรหัสผู้ใช้งานของผู้อื่น" };
+        return {
+          status: "error",
+          message: "ชื่อสำหรับล็อกอินซ้ำกับรหัสผู้ใช้งานของผู้อื่น",
+        };
       }
     }
   }
 
   // 2. บันทึกข้อมูล (Update)
-  const userRowIndex = data.findIndex((row) => String(row[usernameCol]).trim() === targetUsername);
-  
+  const userRowIndex = data.findIndex(
+    (row) => String(row[usernameCol]).trim() === targetUsername,
+  );
+
   if (userRowIndex > 0) {
     // บันทึก LoginName
-    if (loginNameCol > -1) sheet.getRange(userRowIndex + 1, loginNameCol + 1).setValue(targetLoginName);
-    
+    if (loginNameCol > -1)
+      sheet
+        .getRange(userRowIndex + 1, loginNameCol + 1)
+        .setValue(targetLoginName);
+
     // บันทึกข้อมูลอื่นๆ
     const fullNameCol = findColumnIndex(headers, "FullName");
     const emailCol = findColumnIndex(headers, "Email");
     const positionCol = findColumnIndex(headers, "Position");
     const departmentCol = findColumnIndex(headers, "Department");
 
-    if (fullNameCol > -1) sheet.getRange(userRowIndex + 1, fullNameCol + 1).setValue(fullName);
-    if (emailCol > -1) sheet.getRange(userRowIndex + 1, emailCol + 1).setValue(email);
-    if (positionCol > -1) sheet.getRange(userRowIndex + 1, positionCol + 1).setValue(position);
-    if (departmentCol > -1) sheet.getRange(userRowIndex + 1, departmentCol + 1).setValue(department);
-    
+    if (fullNameCol > -1)
+      sheet.getRange(userRowIndex + 1, fullNameCol + 1).setValue(fullName);
+    if (emailCol > -1)
+      sheet.getRange(userRowIndex + 1, emailCol + 1).setValue(email);
+    if (positionCol > -1)
+      sheet.getRange(userRowIndex + 1, positionCol + 1).setValue(position);
+    if (departmentCol > -1)
+      sheet.getRange(userRowIndex + 1, departmentCol + 1).setValue(department);
+
     return { status: "success", message: "อัปเดตข้อมูลสำเร็จ" };
   }
-  
+
   return { status: "error", message: "ไม่พบข้อมูลผู้ใช้ในระบบ" };
 }
 
@@ -351,7 +443,9 @@ function updatePassword(payload) {
     if (currentPasswordInSheet !== oldPassword) {
       return { status: "error", message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" };
     }
-    sheet.getRange(userRowIndex + 1, passwordColIndex + 1).setValue(newPassword);
+    sheet
+      .getRange(userRowIndex + 1, passwordColIndex + 1)
+      .setValue(newPassword);
     return { status: "success", message: "เปลี่ยนรหัสผ่านสำเร็จ" };
   }
   return { status: "error", message: "ไม่พบผู้ใช้ในระบบ" };
@@ -362,7 +456,8 @@ function handleForgotPassword(payload) {
   if (!email) return { status: "error", message: "ไม่พบอีเมล" };
 
   try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Users");
+    const sheet =
+      SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Users");
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
 
@@ -390,7 +485,12 @@ function handleForgotPassword(payload) {
           <p>รหัสผ่านชั่วคราวของคุณคือ: <strong>${tempPassword}</strong></p>
           <p>กรุณาใช้รหัสผ่านนี้เพื่อเข้าสู่ระบบ และเปลี่ยนรหัสผ่านทันที</p>
         `;
-        MailApp.sendEmail({ to: email, subject: subject, htmlBody: body, name: "ระบบ WNY App" });
+        MailApp.sendEmail({
+          to: email,
+          subject: subject,
+          htmlBody: body,
+          name: "ระบบ WNY App",
+        });
         return { status: "success", message: "ส่งรหัสผ่านใหม่ไปยังอีเมลแล้ว" };
       }
     }
@@ -411,7 +511,9 @@ function deleteUser(payload) {
   const headers = data[0];
   const usernameCol = findColumnIndex(headers, "Username");
   // ✅ แก้ไข GAS-BUG-008: เพิ่ม String() เพื่อป้องกัน type mismatch ในการเปรียบเทียบ
-  const userRowIndex = data.findIndex((row) => String(row[usernameCol]).trim() === String(username).trim()); 
+  const userRowIndex = data.findIndex(
+    (row) => String(row[usernameCol]).trim() === String(username).trim(),
+  );
   if (userRowIndex > 0) {
     sheet.deleteRow(userRowIndex + 1);
     return { status: "success", message: "ลบผู้ใช้สำเร็จ" };
@@ -434,8 +536,13 @@ function importUsers(payload) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const usernameCol = findColumnIndex(headers, "Username");
   const lastRow = sheet.getLastRow();
-  const existingUsernames = lastRow > 1
-      ? sheet.getRange(2, usernameCol + 1, lastRow - 1, 1).getValues().flat().map(String)
+  const existingUsernames =
+    lastRow > 1
+      ? sheet
+          .getRange(2, usernameCol + 1, lastRow - 1, 1)
+          .getValues()
+          .flat()
+          .map(String)
       : [];
 
   let importedCount = 0;
@@ -454,17 +561,27 @@ function importUsers(payload) {
       user.Department || "",
       user.Role || "user",
       user.SpecialPosition || "",
-      username // LoginName default
+      username, // LoginName default
     ]);
     existingUsernames.push(username);
     importedCount++;
   }
 
   if (rowsToAdd.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, rowsToAdd[0].length).setValues(rowsToAdd);
+    sheet
+      .getRange(
+        sheet.getLastRow() + 1,
+        1,
+        rowsToAdd.length,
+        rowsToAdd[0].length,
+      )
+      .setValues(rowsToAdd);
   }
 
-  return { status: "success", message: `นำเข้าผู้ใช้สำเร็จ ${importedCount} คน` };
+  return {
+    status: "success",
+    message: `นำเข้าผู้ใช้สำเร็จ ${importedCount} คน`,
+  };
 }
 
 // ==================================================================
@@ -474,7 +591,27 @@ function importUsers(payload) {
 function saveDraftRequest(payload) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const draftSheet = ss.getSheetByName("DraftRequests");
-  ensureSheetColumns(draftSheet, ["DraftId", "Username", "DocDate", "RequesterName", "RequesterPosition", "Location", "Purpose", "StartDate", "EndDate", "Attendees", "ExpenseOption", "ExpenseItems", "TotalExpense", "VehicleOption", "LicensePlate", "Department", "HeadName", "Timestamp", "Status"]);
+  ensureSheetColumns(draftSheet, [
+    "DraftId",
+    "Username",
+    "DocDate",
+    "RequesterName",
+    "RequesterPosition",
+    "Location",
+    "Purpose",
+    "StartDate",
+    "EndDate",
+    "Attendees",
+    "ExpenseOption",
+    "ExpenseItems",
+    "TotalExpense",
+    "VehicleOption",
+    "LicensePlate",
+    "Department",
+    "HeadName",
+    "Timestamp",
+    "Status",
+  ]);
   const timestamp = new Date();
   let draftId = payload.draftId;
 
@@ -484,7 +621,8 @@ function saveDraftRequest(payload) {
     deleteDraftById(draftId);
   }
 
-  const formatDate = (d) => d ? Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd") : "";
+  const formatDate = (d) =>
+    d ? Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd") : "";
 
   const rowData = [
     draftId,
@@ -508,7 +646,11 @@ function saveDraftRequest(payload) {
     "draft",
   ];
   draftSheet.appendRow(rowData);
-  return { status: "success", data: { draftId: draftId }, message: "บันทึกแบบร่างเรียบร้อยแล้ว" };
+  return {
+    status: "success",
+    data: { draftId: draftId },
+    message: "บันทึกแบบร่างเรียบร้อยแล้ว",
+  };
 }
 
 function getDraftRequest(payload) {
@@ -517,21 +659,38 @@ function getDraftRequest(payload) {
   const draftSheet = ss.getSheetByName("DraftRequests");
   if (draftSheet) {
     const draftData = sheetToObject(draftSheet);
-    const draft = draftData.find((d) => String(d.draftId) === String(requestId));
+    const draft = draftData.find(
+      (d) => String(d.draftId) === String(requestId),
+    );
     if (draft) {
-      if (typeof draft.attendees === "string") try { draft.attendees = JSON.parse(draft.attendees); } catch (e) { draft.attendees = []; }
-      if (typeof draft.expenseItems === "string") try { draft.expenseItems = JSON.parse(draft.expenseItems); } catch (e) { draft.expenseItems = []; }
+      if (typeof draft.attendees === "string")
+        try {
+          draft.attendees = JSON.parse(draft.attendees);
+        } catch (e) {
+          draft.attendees = [];
+        }
+      if (typeof draft.expenseItems === "string")
+        try {
+          draft.expenseItems = JSON.parse(draft.expenseItems);
+        } catch (e) {
+          draft.expenseItems = [];
+        }
       return draft;
     }
   }
 
   const requestSheet = ss.getSheetByName("Requests");
   const requestData = sheetToObject(requestSheet);
-  const originalRequest = requestData.find((r) => String(r.id) === String(requestId));
+  const originalRequest = requestData.find(
+    (r) => String(r.id) === String(requestId),
+  );
   if (originalRequest) {
     const attendees = getAttendeesForRequest(requestId);
     let expenseItems = [];
-    if (typeof originalRequest.expenseItems === "string") try { expenseItems = JSON.parse(originalRequest.expenseItems); } catch (e) {}
+    if (typeof originalRequest.expenseItems === "string")
+      try {
+        expenseItems = JSON.parse(originalRequest.expenseItems);
+      } catch (e) {}
 
     return {
       draftId: "",
@@ -558,7 +717,8 @@ function getDraftRequest(payload) {
 }
 
 function getAllDraftRequests() {
-  const draftSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("DraftRequests");
+  const draftSheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("DraftRequests");
   return draftSheet ? sheetToObject(draftSheet) : [];
 }
 
@@ -592,41 +752,47 @@ function deleteDraftById(draftId) {
 
 function getAllRequests() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const requestSheet   = ss.getSheetByName("Requests");
+  const requestSheet = ss.getSheetByName("Requests");
   const attendeesSheet = ss.getSheetByName("Attendees");
-  const memosSheet     = ss.getSheetByName("Memos");
+  const memosSheet = ss.getSheetByName("Memos");
 
-  const requests  = sheetToObject(requestSheet);
+  const requests = sheetToObject(requestSheet);
   const attendees = sheetToObject(attendeesSheet);
 
   // สร้าง index จาก Memos sheet ตาม refNumber เพื่อ join URL ไฟล์ที่แอดมินอัพโหลด
   const memoIndex = {};
   if (memosSheet) {
-    sheetToObject(memosSheet).forEach(memo => {
-      const key = String(memo.refNumber || memo.id || '').trim();
+    sheetToObject(memosSheet).forEach((memo) => {
+      const key = String(memo.refNumber || memo.id || "").trim();
       if (key) memoIndex[key] = memo;
     });
   }
 
   requests.forEach((req) => {
-    const reqId = String(req.id || req.requestid || '').trim();
+    const reqId = String(req.id || req.requestid || "").trim();
 
     // Attendees count
-    const attendeeCount = attendees.filter((a) => String(a.requestid) === reqId).length;
+    const attendeeCount = attendees.filter(
+      (a) => String(a.requestid) === reqId,
+    ).length;
     req.attendeeCount = attendeeCount;
-    req.totalPeople   = attendeeCount + 1;
+    req.totalPeople = attendeeCount + 1;
 
     // Join URL ไฟล์จาก Memos sheet — เติมเฉพาะ field ที่ยังว่างอยู่ใน Requests sheet
     // ทำให้ข้อมูลเก่าที่เก็บไว้ใน Memos ไหลมาแสดงในหน้า dashboard ผู้ใช้ด้วย
     const memo = memoIndex[reqId];
     if (memo) {
       // completedMemoUrl / adminMemoUrl — ไฟล์ที่แอดมินอัพโหลดให้ผู้ใช้นำไปใช้
-      if (!req.adminMemoUrl      && memo.completedMemoUrl)    req.adminMemoUrl      = memo.completedMemoUrl;
-      if (!req.completedMemoUrl  && memo.completedMemoUrl)    req.completedMemoUrl  = memo.completedMemoUrl;
-      if (!req.completedCommandUrl && memo.completedCommandUrl) req.completedCommandUrl = memo.completedCommandUrl;
-      if (!req.dispatchBookUrl   && memo.dispatchBookUrl)     req.dispatchBookUrl   = memo.dispatchBookUrl;
+      if (!req.adminMemoUrl && memo.completedMemoUrl)
+        req.adminMemoUrl = memo.completedMemoUrl;
+      if (!req.completedMemoUrl && memo.completedMemoUrl)
+        req.completedMemoUrl = memo.completedMemoUrl;
+      if (!req.completedCommandUrl && memo.completedCommandUrl)
+        req.completedCommandUrl = memo.completedCommandUrl;
+      if (!req.dispatchBookUrl && memo.dispatchBookUrl)
+        req.dispatchBookUrl = memo.dispatchBookUrl;
       // status จาก Memos (ถ้า Requests ยังไม่มีค่าหรือยังเป็น default)
-      if (!req.status || req.status === 'กำลังดำเนินการ') {
+      if (!req.status || req.status === "กำลังดำเนินการ") {
         if (memo.status) req.status = memo.status;
       }
     }
@@ -641,7 +807,8 @@ function getUserRequests(username) {
 
 // คืนค่าเลขลำดับสูงสุดในปีนั้นจาก Requests sheet (ใช้ initialize Firestore counter)
 function getMaxRequestSeq(yearBE) {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
+  const sheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
   if (!sheet) return { status: "success", maxSeq: 0 };
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return { status: "success", maxSeq: 0 };
@@ -662,7 +829,8 @@ function getMaxRequestSeq(yearBE) {
 }
 
 function getAttendeesForRequest(requestId) {
-  const attendeesSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Attendees");
+  const attendeesSheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Attendees");
   const data = attendeesSheet.getDataRange().getValues();
   const headers = data[0];
   const idCol = findColumnIndex(headers, "RequestId");
@@ -670,14 +838,16 @@ function getAttendeesForRequest(requestId) {
   const posCol = findColumnIndex(headers, "Position");
 
   if (idCol === -1) return [];
-  return data.filter(row => String(row[idCol]) === String(requestId)).map(row => ({
-    name: row[nameCol],
-    position: row[posCol]
-  }));
+  return data
+    .filter((row) => String(row[idCol]) === String(requestId))
+    .map((row) => ({
+      name: row[nameCol],
+      position: row[posCol],
+    }));
 }
 
 function deleteRequest(payload) {
-  const id = payload.id || payload.requestId; 
+  const id = payload.id || payload.requestId;
   deleteRequestById(id);
   return { status: "success", message: "ลบคำขอสำเร็จ" };
 }
@@ -689,19 +859,22 @@ function deleteRequestById(requestId) {
   // Delete from Requests
   const reqData = requestSheet.getDataRange().getValues();
   const reqIdCol = findColumnIndex(reqData[0], "RequestId");
-  const reqRow = reqData.findIndex(row => String(row[reqIdCol]) === String(requestId));
+  const reqRow = reqData.findIndex(
+    (row) => String(row[reqIdCol]) === String(requestId),
+  );
   if (reqRow > 0) requestSheet.deleteRow(reqRow + 1);
   // Delete from Attendees
   const attData = attendeesSheet.getDataRange().getValues();
   const attIdCol = findColumnIndex(attData[0], "RequestId");
   const rowsToDelete = [];
   for (let i = 1; i < attData.length; i++) {
-    if (String(attData[i][attIdCol]) === String(requestId)) rowsToDelete.push(i + 1);
+    if (String(attData[i][attIdCol]) === String(requestId))
+      rowsToDelete.push(i + 1);
   }
   for (let i = rowsToDelete.length - 1; i >= 0; i--) {
     attendeesSheet.deleteRow(rowsToDelete[i]);
   }
-  
+
   deleteOldPdfFiles(requestId);
 }
 
@@ -713,17 +886,20 @@ function _getOrCreateTrashSheet(ss) {
   let trashSheet = ss.getSheetByName("Trash");
   if (!trashSheet) {
     const requestSheet = ss.getSheetByName("Requests");
-    const reqHeaders = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+    const reqHeaders = requestSheet
+      .getRange(1, 1, 1, requestSheet.getLastColumn())
+      .getValues()[0];
     trashSheet = ss.insertSheet("Trash");
-    trashSheet.getRange(1, 1, 1, reqHeaders.length + 2)
-              .setValues([[...reqHeaders, "DeletedAt", "DeletedBy"]]);
+    trashSheet
+      .getRange(1, 1, 1, reqHeaders.length + 2)
+      .setValues([[...reqHeaders, "DeletedAt", "DeletedBy"]]);
   }
   return trashSheet;
 }
 
 function softDeleteRequest(payload) {
   const id = payload.id || payload.requestId;
-  const deletedBy = payload.username || 'unknown';
+  const deletedBy = payload.username || "unknown";
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const requestSheet = ss.getSheetByName("Requests");
   const trashSheet = _getOrCreateTrashSheet(ss);
@@ -731,12 +907,16 @@ function softDeleteRequest(payload) {
   const reqData = requestSheet.getDataRange().getValues();
   const headers = reqData[0];
   const reqIdCol = findColumnIndex(headers, "RequestId");
-  const reqRow = reqData.findIndex((row, i) => i > 0 && String(row[reqIdCol]) === String(id));
+  const reqRow = reqData.findIndex(
+    (row, i) => i > 0 && String(row[reqIdCol]) === String(id),
+  );
   if (reqRow <= 0) return { status: "error", message: "ไม่พบคำขอ " + id };
 
-  const trashHeaders = trashSheet.getRange(1, 1, 1, trashSheet.getLastColumn()).getValues()[0];
+  const trashHeaders = trashSheet
+    .getRange(1, 1, 1, trashSheet.getLastColumn())
+    .getValues()[0];
   const rowData = reqData[reqRow];
-  const trashRow = trashHeaders.map(h => {
+  const trashRow = trashHeaders.map((h) => {
     if (h === "DeletedAt") return new Date();
     if (h === "DeletedBy") return deletedBy;
     const idx = headers.indexOf(h);
@@ -756,21 +936,31 @@ function restoreRequest(payload) {
   if (!trashSheet) return { status: "error", message: "ถังขยะว่างเปล่า" };
 
   const trashData = trashSheet.getDataRange().getValues();
-  if (trashData.length <= 1) return { status: "error", message: "ถังขยะว่างเปล่า" };
+  if (trashData.length <= 1)
+    return { status: "error", message: "ถังขยะว่างเปล่า" };
 
   const trashHeaders = trashData[0];
   const trashIdCol = findColumnIndex(trashHeaders, "RequestId");
-  const trashRow = trashData.findIndex((row, i) => i > 0 && String(row[trashIdCol]) === String(id));
+  const trashRow = trashData.findIndex(
+    (row, i) => i > 0 && String(row[trashIdCol]) === String(id),
+  );
   if (trashRow <= 0) return { status: "error", message: "ไม่พบข้อมูลในถังขยะ" };
 
   const deletedAtCol = findColumnIndex(trashHeaders, "DeletedAt");
   if (deletedAtCol >= 0 && trashData[trashRow][deletedAtCol]) {
-    const hoursSince = (new Date() - new Date(trashData[trashRow][deletedAtCol])) / 3600000;
-    if (hoursSince > 24) return { status: "error", message: "หมดเวลากู้คืน (เกิน 24 ชั่วโมงแล้ว)" };
+    const hoursSince =
+      (new Date() - new Date(trashData[trashRow][deletedAtCol])) / 3600000;
+    if (hoursSince > 24)
+      return {
+        status: "error",
+        message: "หมดเวลากู้คืน (เกิน 24 ชั่วโมงแล้ว)",
+      };
   }
 
-  const reqHeaders = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
-  const restoredRow = reqHeaders.map(h => {
+  const reqHeaders = requestSheet
+    .getRange(1, 1, 1, requestSheet.getLastColumn())
+    .getValues()[0];
+  const restoredRow = reqHeaders.map((h) => {
     const idx = trashHeaders.indexOf(h);
     return idx >= 0 ? trashData[trashRow][idx] : "";
   });
@@ -789,9 +979,9 @@ function getTrashItems(payload) {
   if (trashData.length <= 1) return { status: "success", data: [] };
 
   const headers = trashData[0];
-  const idCol       = findColumnIndex(headers, "RequestId");
-  const nameCol     = findColumnIndex(headers, "RequesterName");
-  const purposeCol  = findColumnIndex(headers, "Purpose");
+  const idCol = findColumnIndex(headers, "RequestId");
+  const nameCol = findColumnIndex(headers, "RequesterName");
+  const purposeCol = findColumnIndex(headers, "Purpose");
   const deletedAtCol = findColumnIndex(headers, "DeletedAt");
   const deletedByCol = findColumnIndex(headers, "DeletedBy");
   const now = new Date();
@@ -810,12 +1000,12 @@ function getTrashItems(payload) {
     if (username && deletedBy !== username) continue; // กรองตาม user
 
     items.push({
-      id:          reqId,
+      id: reqId,
       requesterName: nameCol >= 0 ? String(row[nameCol]) : "",
-      purpose:     purposeCol >= 0 ? String(row[purposeCol]) : "",
-      deletedAt:   deletedAt ? deletedAt.toISOString() : "",
-      deletedBy:   deletedBy,
-      hoursLeft:   Math.max(0, 24 - hoursSince).toFixed(1)
+      purpose: purposeCol >= 0 ? String(row[purposeCol]) : "",
+      deletedAt: deletedAt ? deletedAt.toISOString() : "",
+      deletedBy: deletedBy,
+      hoursLeft: Math.max(0, 24 - hoursSince).toFixed(1),
     });
   }
 
@@ -827,42 +1017,59 @@ function saveRequestAndGeneratePdf(payload) {
   const requestSheet = ss.getSheetByName("Requests");
   // ตรวจสอบคอลัมน์ให้ครบ
   ensureSheetColumns(requestSheet, [
-    "CommandPdfUrl", "CommandStatus", "PdfUrl", "DocUrl", 
-    "CommandPdfUrlSolo", "CommandDocUrlSolo", 
-    "CommandPdfUrlGroupSmall", "CommandDocUrlGroupSmall", 
-    "CommandPdfUrlGroupLarge", "CommandDocUrlGroupLarge", 
-    "DispatchBookPdfUrl", "DispatchBookUrl",
-    "Province", "StayAt", "DispatchVehicleType", "DispatchVehicleId",
-    "CompletedMemoUrl", "CompletedCommandUrl", "AdminMemoUrl",
-    "DocStatus", "WasRejected", "RejectionReason"
+    "CommandPdfUrl",
+    "CommandStatus",
+    "PdfUrl",
+    "DocUrl",
+    "CommandPdfUrlSolo",
+    "CommandDocUrlSolo",
+    "CommandPdfUrlGroupSmall",
+    "CommandDocUrlGroupSmall",
+    "CommandPdfUrlGroupLarge",
+    "CommandDocUrlGroupLarge",
+    "DispatchBookPdfUrl",
+    "DispatchBookUrl",
+    "Province",
+    "StayAt",
+    "DispatchVehicleType",
+    "DispatchVehicleId",
+    "CompletedMemoUrl",
+    "CompletedCommandUrl",
+    "AdminMemoUrl",
+    "DocStatus",
+    "WasRejected",
+    "RejectionReason",
   ]);
   const attendeesSheet = ss.getSheetByName("Attendees");
 
   const requestIdentifier = payload.id || payload.requestId || null;
   const isUpdate = !!requestIdentifier;
-  let requestId = requestIdentifier, docNumber;
+  let requestId = requestIdentifier,
+    docNumber;
 
   // --- ส่วนจัดการ ID ---
   if (isUpdate) {
     requestId = requestIdentifier;
     docNumber = requestId.split("/")[0].replace("บค", "") || "";
-    
+
     // ★★★ แก้ไขจุดที่ 1: ลบรายชื่อเฉพาะเมื่อมีการส่งรายชื่อใหม่มาเท่านั้น (ป้องกันรายชื่อหาย) ★★★
     if (payload.attendees !== undefined) {
-        const attData = attendeesSheet.getDataRange().getValues();
-        const attIdCol = findColumnIndex(attData[0], "RequestId");
-        const rowsToDelete = [];
-        for (let i = 1; i < attData.length; i++) {
-          if (String(attData[i][attIdCol]) === String(requestId)) rowsToDelete.push(i + 1);
-        }
-        for (let i = rowsToDelete.length - 1; i >= 0; i--) {
-          attendeesSheet.deleteRow(rowsToDelete[i]);
-        }
+      const attData = attendeesSheet.getDataRange().getValues();
+      const attIdCol = findColumnIndex(attData[0], "RequestId");
+      const rowsToDelete = [];
+      for (let i = 1; i < attData.length; i++) {
+        if (String(attData[i][attIdCol]) === String(requestId))
+          rowsToDelete.push(i + 1);
+      }
+      for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+        attendeesSheet.deleteRow(rowsToDelete[i]);
+      }
     }
   } else {
     // (Logic สร้าง ID ใหม่ เหมือนเดิม)
     const docDate = new Date(payload.docDate);
-    const buddhistYear = parseInt(Utilities.formatDate(docDate, "Asia/Bangkok", "yyyy")) + 543;
+    const buddhistYear =
+      parseInt(Utilities.formatDate(docDate, "Asia/Bangkok", "yyyy")) + 543;
     const reqData = requestSheet.getDataRange().getValues();
     const reqIdCol = findColumnIndex(reqData[0], "RequestId");
     let maxNumber = 0;
@@ -878,11 +1085,21 @@ function saveRequestAndGeneratePdf(payload) {
   }
 
   // --- บันทึกรายชื่อผู้ร่วมเดินทาง (ทำงานเฉพาะเมื่อมีข้อมูลส่งมา) ---
-  const formatDate = (d) => Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd");
-  
-  if (payload.attendees && Array.isArray(payload.attendees) && payload.attendees.length > 0) {
+  const formatDate = (d) =>
+    Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd");
+
+  if (
+    payload.attendees &&
+    Array.isArray(payload.attendees) &&
+    payload.attendees.length > 0
+  ) {
     payload.attendees.forEach((att) => {
-      attendeesSheet.appendRow([requestId, att.name, att.position, formatDate(payload.docDate)]);
+      attendeesSheet.appendRow([
+        requestId,
+        att.name,
+        att.position,
+        formatDate(payload.docDate),
+      ]);
     });
   }
 
@@ -890,38 +1107,51 @@ function saveRequestAndGeneratePdf(payload) {
   let pdfUrl = "";
   let docUrl = "";
 
-  if (payload.preGeneratedPdfUrl && payload.preGeneratedPdfUrl !== "SKIP_GENERATION") {
+  if (
+    payload.preGeneratedPdfUrl &&
+    payload.preGeneratedPdfUrl !== "SKIP_GENERATION"
+  ) {
     pdfUrl = payload.preGeneratedPdfUrl;
-    docUrl = payload.preGeneratedDocUrl || ""; 
+    docUrl = payload.preGeneratedDocUrl || "";
   } else if (!payload.preGeneratedPdfUrl) {
     // ถ้าไม่มีการส่ง URL มา (และไม่ใช่โหมด SKIP) ให้สร้างใหม่
-    const files = createPdfFromTemplate(payload, requestId, docNumber, DOC_TEMPLATE_ID, "บันทึกข้อความขอไปราชการ");
+    const files = createPdfFromTemplate(
+      payload,
+      requestId,
+      docNumber,
+      DOC_TEMPLATE_ID,
+      "บันทึกข้อความขอไปราชการ",
+    );
     pdfUrl = files.pdfUrl;
     docUrl = files.docUrl;
   }
 
   // --- ส่วนบันทึกข้อมูลลง Sheet ---
-  const headers = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+  const headers = requestSheet
+    .getRange(1, 1, 1, requestSheet.getLastColumn())
+    .getValues()[0];
   let createdBy = payload.username;
-  
+
   // กรณี Update: ต้องดึงข้อมูลเดิมมาด้วย เพื่อป้องกันการบันทึกทับด้วยค่าว่าง
   let currentData = {};
   let rowIndex = -1;
-  
-  if (isUpdate) {
-     const data = requestSheet.getDataRange().getValues();
-     const idCol = findColumnIndex(headers, "RequestId");
-     rowIndex = data.findIndex(row => String(row[idCol]) === String(requestId));
-     // ✅ UPSERT: ถ้าพบแถว ให้อ่านข้อมูลเดิม; ถ้าไม่พบ ให้ appendRow ด้านล่าง (background sync จาก Firestore)
-     if (rowIndex > 0) {
-       const creatorCol = findColumnIndex(headers, "CreatedBy");
-       if (creatorCol > -1) createdBy = data[rowIndex][creatorCol];
 
-       // อ่านข้อมูลเดิมเก็บไว้ (Mapping)
-       headers.forEach((h, i) => {
-           currentData[h.toLowerCase().replace(/\s+/g, "")] = data[rowIndex][i];
-       });
-     }
+  if (isUpdate) {
+    const data = requestSheet.getDataRange().getValues();
+    const idCol = findColumnIndex(headers, "RequestId");
+    rowIndex = data.findIndex(
+      (row) => String(row[idCol]) === String(requestId),
+    );
+    // ✅ UPSERT: ถ้าพบแถว ให้อ่านข้อมูลเดิม; ถ้าไม่พบ ให้ appendRow ด้านล่าง (background sync จาก Firestore)
+    if (rowIndex > 0) {
+      const creatorCol = findColumnIndex(headers, "CreatedBy");
+      if (creatorCol > -1) createdBy = data[rowIndex][creatorCol];
+
+      // อ่านข้อมูลเดิมเก็บไว้ (Mapping)
+      headers.forEach((h, i) => {
+        currentData[h.toLowerCase().replace(/\s+/g, "")] = data[rowIndex][i];
+      });
+    }
   }
 
   // สร้าง Object ข้อมูลที่จะบันทึก
@@ -929,38 +1159,54 @@ function saveRequestAndGeneratePdf(payload) {
   const rowObject = {
     requestid: requestId,
     createdby: createdBy,
-    docdate: payload.docDate ? formatDate(payload.docDate) : currentData.docdate,
+    docdate: payload.docDate
+      ? formatDate(payload.docDate)
+      : currentData.docdate,
     requestername: payload.requesterName || currentData.requestername,
-    requesterposition: payload.requesterPosition || currentData.requesterposition,
+    requesterposition:
+      payload.requesterPosition || currentData.requesterposition,
     location: payload.location || currentData.location,
     purpose: payload.purpose || currentData.purpose,
-    startdate: payload.startDate ? formatDate(payload.startDate) : currentData.startdate,
-    enddate: payload.endDate ? formatDate(payload.endDate) : currentData.enddate,
+    startdate: payload.startDate
+      ? formatDate(payload.startDate)
+      : currentData.startdate,
+    enddate: payload.endDate
+      ? formatDate(payload.endDate)
+      : currentData.enddate,
     expenseoption: payload.expenseOption || currentData.expenseoption,
-    expenseitems: payload.expenseItems ? JSON.stringify(payload.expenseItems) : currentData.expenseitems,
-    totalexpense: payload.totalExpense !== undefined ? Number(payload.totalExpense) : currentData.totalexpense,
+    expenseitems: payload.expenseItems
+      ? JSON.stringify(payload.expenseItems)
+      : currentData.expenseitems,
+    totalexpense:
+      payload.totalExpense !== undefined
+        ? Number(payload.totalExpense)
+        : currentData.totalexpense,
     vehicleoption: payload.vehicleOption || currentData.vehicleoption,
     licenseplate: payload.licensePlate || currentData.licenseplate,
     department: payload.department || currentData.department,
     headname: payload.headName || currentData.headname,
-    
+
     // คงค่าเดิมไว้ถ้าไม่มีการส่งมาใหม่ (สำคัญสำหรับ PDF หลัก)
     pdfurl: pdfUrl || currentData.pdfurl,
     docurl: docUrl || currentData.docurl,
-    
+
     // ★★★ ฟิลด์ใหม่ที่เพิ่มเข้ามา (ต้องใส่ให้ครบไม่งั้นหาย) ★★★
-    dispatchbookpdfurl: payload.dispatchBookPdfUrl || currentData.dispatchbookpdfurl, 
+    dispatchbookpdfurl:
+      payload.dispatchBookPdfUrl || currentData.dispatchbookpdfurl,
     province: payload.province || currentData.province,
     stayat: payload.stayAt || currentData.stayat,
-    dispatchvehicletype: payload.dispatchVehicleType || currentData.dispatchvehicletype,
-    dispatchvehicleid: payload.dispatchVehicleId || currentData.dispatchvehicleid,
+    dispatchvehicletype:
+      payload.dispatchVehicleType || currentData.dispatchvehicletype,
+    dispatchvehicleid:
+      payload.dispatchVehicleId || currentData.dispatchvehicleid,
     completedmemourl: payload.completedMemoUrl || currentData.completedmemourl,
-    completedcommandurl: payload.completedCommandUrl || currentData.completedcommandurl,
+    completedcommandurl:
+      payload.completedCommandUrl || currentData.completedcommandurl,
     adminmemourl: payload.adminMemoUrl || currentData.adminmemourl,
     dispatchbookurl: payload.dispatchBookUrl || currentData.dispatchbookurl,
 
     timestamp: new Date(),
-    status: (isUpdate && rowIndex > 0) ? "แก้ไขแล้ว" : "กำลังดำเนินการ"
+    status: isUpdate && rowIndex > 0 ? "แก้ไขแล้ว" : "กำลังดำเนินการ",
   };
 
   const finalRowData = headers.map((header) => {
@@ -968,29 +1214,31 @@ function saveRequestAndGeneratePdf(payload) {
     // ถ้ามีค่าใน rowObject ให้ใช้ ถ้าไม่มีให้ปล่อยว่าง
     return rowObject[key] !== undefined ? rowObject[key] : "";
   });
-  
+
   if (isUpdate && rowIndex > 0) {
-    requestSheet.getRange(rowIndex + 1, 1, 1, finalRowData.length).setValues([finalRowData]);
+    requestSheet
+      .getRange(rowIndex + 1, 1, 1, finalRowData.length)
+      .setValues([finalRowData]);
   } else {
     requestSheet.appendRow(finalRowData);
     // (ส่วนส่งเมลแจ้งเตือนเดิม...)
   }
 
-  return { 
-    status: "success", 
-    message: isUpdate ? "อัปเดตคำขอสำเร็จ" : "สร้างคำขอสำเร็จ", 
-    data: { id: requestId, pdfUrl: pdfUrl, docUrl: docUrl } 
+  return {
+    status: "success",
+    message: isUpdate ? "อัปเดตคำขอสำเร็จ" : "สร้างคำขอสำเร็จ",
+    data: { id: requestId, pdfUrl: pdfUrl, docUrl: docUrl },
   };
 }
 
-
 function updateRequestStatusCommand(payload) {
   const { requestId, status } = payload;
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
+  const sheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
   const data = sheet.getDataRange().getValues();
   const idCol = findColumnIndex(data[0], "RequestId");
   const statusCol = findColumnIndex(data[0], "CommandStatus");
-  const rowIndex = data.findIndex(row => row[idCol] === requestId);
+  const rowIndex = data.findIndex((row) => row[idCol] === requestId);
   if (rowIndex > 0) {
     sheet.getRange(rowIndex + 1, statusCol + 1).setValue(status);
     return { status: "success", message: "Status updated." };
@@ -999,13 +1247,27 @@ function updateRequestStatusCommand(payload) {
 }
 
 function approveCommand(payload) {
-  const { 
-    requestId, templateType, 
-    requesterName, requesterPosition, location, purpose, 
-    startDate, endDate, docDate, attendees,
-    expenseOption, expenseItems, totalExpense, vehicleOption, licensePlate,
-    preGeneratedPdfUrl, preGeneratedDocUrl, // รับค่า URL ที่สร้างจาก Cloud Run (ถ้ามี)
-    createdby, department, headName
+  const {
+    requestId,
+    templateType,
+    requesterName,
+    requesterPosition,
+    location,
+    purpose,
+    startDate,
+    endDate,
+    docDate,
+    attendees,
+    expenseOption,
+    expenseItems,
+    totalExpense,
+    vehicleOption,
+    licensePlate,
+    preGeneratedPdfUrl,
+    preGeneratedDocUrl, // รับค่า URL ที่สร้างจาก Cloud Run (ถ้ามี)
+    createdby,
+    department,
+    headName,
   } = payload;
 
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -1015,7 +1277,9 @@ function approveCommand(payload) {
   const data = requestSheet.getDataRange().getValues();
   const headers = data[0];
   const idCol = findColumnIndex(headers, "RequestId");
-  const rowIndex = data.findIndex(row => String(row[idCol]) === String(requestId));
+  const rowIndex = data.findIndex(
+    (row) => String(row[idCol]) === String(requestId),
+  );
 
   if (rowIndex === -1) {
     return { status: "error", message: "ไม่พบรหัสคำขอนี้ในระบบ" };
@@ -1026,7 +1290,7 @@ function approveCommand(payload) {
     const col = findColumnIndex(headers, colName);
     if (col > -1) requestSheet.getRange(rowIndex + 1, col + 1).setValue(value);
   };
-  
+
   updateCell("RequesterName", requesterName);
   updateCell("RequesterPosition", requesterPosition);
   updateCell("Location", location);
@@ -1038,9 +1302,14 @@ function approveCommand(payload) {
   updateCell("TotalExpense", totalExpense);
   updateCell("VehicleOption", vehicleOption);
   updateCell("LicensePlate", licensePlate);
-  
+
   if (expenseItems) {
-     updateCell("ExpenseItems", typeof expenseItems === 'string' ? expenseItems : JSON.stringify(expenseItems));
+    updateCell(
+      "ExpenseItems",
+      typeof expenseItems === "string"
+        ? expenseItems
+        : JSON.stringify(expenseItems),
+    );
   }
 
   // --- 2. อัปเดตรายชื่อผู้ร่วมเดินทาง (Attendees) ---
@@ -1057,82 +1326,106 @@ function approveCommand(payload) {
   for (let i = rowsToDelete.length - 1; i >= 0; i--) {
     attendeesSheet.deleteRow(rowsToDelete[i]);
   }
-  
+
   // เพิ่มรายชื่อใหม่
   let newAttendees = attendees;
-  if (typeof attendees === 'string') {
-    try { newAttendees = JSON.parse(attendees); } catch(e) { newAttendees = []; }
+  if (typeof attendees === "string") {
+    try {
+      newAttendees = JSON.parse(attendees);
+    } catch (e) {
+      newAttendees = [];
+    }
   }
-  
+
   if (newAttendees && Array.isArray(newAttendees)) {
-    newAttendees.forEach(att => {
+    newAttendees.forEach((att) => {
       attendeesSheet.appendRow([requestId, att.name, att.position, docDate]);
     });
   }
 
   // --- 3. จัดการไฟล์ PDF/Doc (รองรับ Cloud Run Hybrid) ---
   const docNumber = requestId.split("/")[0].replace("บค", "");
-  
+
   let selectedUrl, selectedDocUrl;
 
   // กรณี A: มีลิงก์ส่งมาจากหน้าเว็บแล้ว (สร้างด้วย Cloud Run -> Drive เรียบร้อย)
   if (preGeneratedPdfUrl) {
     selectedUrl = preGeneratedPdfUrl;
     selectedDocUrl = preGeneratedDocUrl || "";
-  } 
+  }
   // กรณี B: ไม่มีลิงก์ (Fallback ให้ GAS สร้างเองแบบเดิม)
   else {
     let parsedExpenseItems = expenseItems;
-    if (typeof expenseItems === 'string') {
-        try { parsedExpenseItems = JSON.parse(expenseItems); } catch(e) { parsedExpenseItems = []; }
+    if (typeof expenseItems === "string") {
+      try {
+        parsedExpenseItems = JSON.parse(expenseItems);
+      } catch (e) {
+        parsedExpenseItems = [];
+      }
     }
 
     // ✅ แก้ไข GAS-BUG-001: สร้าง requestDataObject จากข้อมูลในชีท (ก่อนใช้งาน)
     const requestDataRow = data[rowIndex];
     const requestDataObject = headers.reduce((obj, header, i) => {
       let val = requestDataRow[i];
-      if (val instanceof Date) val = Utilities.formatDate(val, "Asia/Bangkok", "yyyy-MM-dd");
+      if (val instanceof Date)
+        val = Utilities.formatDate(val, "Asia/Bangkok", "yyyy-MM-dd");
       obj[header] = val;
       return obj;
     }, {});
 
     // ✅ แก้ไข GAS-BUG-002: ลบ duplicate key "expenseOption" ออก (key ซ้ำ = value หลังทับ value แรก)
     const pdfPayload = {
-        username: createdby || requestDataObject.CreatedBy, 
-        requesterName, requesterPosition, location, purpose,
-        startDate, endDate, docDate,
-        attendees: newAttendees,
-        expenseOption: expenseOption || requestDataObject.ExpenseOption,
-        expenseItems: parsedExpenseItems, 
-        totalExpense,
-        vehicleOption, licensePlate,
-        stayAt: requestDataObject.StayAt || "", 
-        dispatchVehicleType: requestDataObject.DispatchVehicleType || "",
-        dispatchVehicleId: requestDataObject.DispatchVehicleId || "",
-        department: department || requestDataObject.Department,
-        headName: headName || requestDataObject.HeadName
+      username: createdby || requestDataObject.CreatedBy,
+      requesterName,
+      requesterPosition,
+      location,
+      purpose,
+      startDate,
+      endDate,
+      docDate,
+      attendees: newAttendees,
+      expenseOption: expenseOption || requestDataObject.ExpenseOption,
+      expenseItems: parsedExpenseItems,
+      totalExpense,
+      vehicleOption,
+      licensePlate,
+      stayAt: requestDataObject.StayAt || "",
+      dispatchVehicleType: requestDataObject.DispatchVehicleType || "",
+      dispatchVehicleId: requestDataObject.DispatchVehicleId || "",
+      department: department || requestDataObject.Department,
+      headName: headName || requestDataObject.HeadName,
     };
 
     // ดึงข้อมูลขาดเหลือจาก Sheet ถ้า Payload ไม่มีส่งมา
     const userCol = findColumnIndex(headers, "CreatedBy");
     const deptCol = findColumnIndex(headers, "Department");
     const headCol = findColumnIndex(headers, "HeadName");
-    
-    if (!pdfPayload.username && userCol > -1) pdfPayload.username = data[rowIndex][userCol];
-    if (!pdfPayload.department && deptCol > -1) pdfPayload.department = data[rowIndex][deptCol];
-    if (!pdfPayload.headName && headCol > -1) pdfPayload.headName = data[rowIndex][headCol];
+
+    if (!pdfPayload.username && userCol > -1)
+      pdfPayload.username = data[rowIndex][userCol];
+    if (!pdfPayload.department && deptCol > -1)
+      pdfPayload.department = data[rowIndex][deptCol];
+    if (!pdfPayload.headName && headCol > -1)
+      pdfPayload.headName = data[rowIndex][headCol];
 
     const templateIdMap = {
-        solo: COMMAND_TEMPLATE_SOLO_ID,
-        groupSmall: COMMAND_TEMPLATE_GROUP_SMALL_ID,
-        groupLarge: COMMAND_TEMPLATE_GROUP_LARGE_ID,
+      solo: COMMAND_TEMPLATE_SOLO_ID,
+      groupSmall: COMMAND_TEMPLATE_GROUP_SMALL_ID,
+      groupLarge: COMMAND_TEMPLATE_GROUP_LARGE_ID,
     };
     const selectedTemplateId = templateIdMap[templateType];
-    
-    const files = createPdfFromTemplate(pdfPayload, requestId, docNumber, selectedTemplateId, `คำสั่ง_${templateType}`);
+
+    const files = createPdfFromTemplate(
+      pdfPayload,
+      requestId,
+      docNumber,
+      selectedTemplateId,
+      `คำสั่ง_${templateType}`,
+    );
     if (files) {
-        selectedUrl = files.pdfUrl;
-        selectedDocUrl = files.docUrl;
+      selectedUrl = files.pdfUrl;
+      selectedDocUrl = files.docUrl;
     }
   }
 
@@ -1140,59 +1433,82 @@ function approveCommand(payload) {
   if (selectedUrl) {
     const statusCol = findColumnIndex(headers, "CommandStatus");
     const finalUrlCol = findColumnIndex(headers, "CommandPdfUrl");
-    
+
     // เลือกคอลัมน์ที่จะบันทึกตามประเภท Template
-    const typeUrlColName = templateType === "solo" ? "CommandPdfUrlSolo" : templateType === "groupSmall" ? "CommandPdfUrlGroupSmall" : "CommandPdfUrlGroupLarge";
-    const typeDocUrlColName = templateType === "solo" ? "CommandDocUrlSolo" : templateType === "groupSmall" ? "CommandDocUrlGroupSmall" : "CommandDocUrlGroupLarge";
-    
+    const typeUrlColName =
+      templateType === "solo"
+        ? "CommandPdfUrlSolo"
+        : templateType === "groupSmall"
+          ? "CommandPdfUrlGroupSmall"
+          : "CommandPdfUrlGroupLarge";
+    const typeDocUrlColName =
+      templateType === "solo"
+        ? "CommandDocUrlSolo"
+        : templateType === "groupSmall"
+          ? "CommandDocUrlGroupSmall"
+          : "CommandDocUrlGroupLarge";
+
     // ตรวจสอบว่ามีคอลัมน์หรือไม่ ถ้าไม่มีให้สร้าง
     ensureSheetColumns(requestSheet, [typeUrlColName, typeDocUrlColName]);
-    
+
     // โหลด Headers ใหม่เพราะอาจมีการเพิ่มคอลัมน์
-    const headersNew = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+    const headersNew = requestSheet
+      .getRange(1, 1, 1, requestSheet.getLastColumn())
+      .getValues()[0];
     const typeUrlCol = findColumnIndex(headersNew, typeUrlColName);
     const typeDocUrlCol = findColumnIndex(headersNew, typeDocUrlColName);
 
     const rowNum = rowIndex + 1;
-    
+
     // อัปเดตสถานะและ URL หลัก
-    if (statusCol > -1) requestSheet.getRange(rowNum, statusCol + 1).setValue("รอตรวจสอบและออกคำสั่งไปราชการ"); 
-    if (finalUrlCol > -1) requestSheet.getRange(rowNum, finalUrlCol + 1).setValue(selectedUrl);
-    
+    if (statusCol > -1)
+      requestSheet
+        .getRange(rowNum, statusCol + 1)
+        .setValue("รอตรวจสอบและออกคำสั่งไปราชการ");
+    if (finalUrlCol > -1)
+      requestSheet.getRange(rowNum, finalUrlCol + 1).setValue(selectedUrl);
+
     // บันทึกลงคอลัมน์เฉพาะประเภท (แยกเก็บ)
-    if (typeUrlCol > -1) requestSheet.getRange(rowNum, typeUrlCol + 1).setValue(selectedUrl);
-    if (typeDocUrlCol > -1) requestSheet.getRange(rowNum, typeDocUrlCol + 1).setValue(selectedDocUrl);
-if (expenseOption === 'partial') { // หรือเช็คเงื่อนไขอื่นตามที่คุณใช้
-       createAutoMemoRecord(requestId, createdby);
+    if (typeUrlCol > -1)
+      requestSheet.getRange(rowNum, typeUrlCol + 1).setValue(selectedUrl);
+    if (typeDocUrlCol > -1)
+      requestSheet.getRange(rowNum, typeDocUrlCol + 1).setValue(selectedDocUrl);
+    if (expenseOption === "partial") {
+      // หรือเช็คเงื่อนไขอื่นตามที่คุณใช้
+      createAutoMemoRecord(requestId, createdby);
     }
     // ส่งอีเมลแจ้งเตือนเจ้าของเรื่อง
     const userCol = findColumnIndex(headers, "CreatedBy");
-    const username = createdby || (userCol > -1 ? data[rowIndex][userCol] : null);
-    
+    const username =
+      createdby || (userCol > -1 ? data[rowIndex][userCol] : null);
+
     if (username) {
-      sendNotificationEmail(username, `[WNY App] คำขอ ${requestId} อนุมัติและออกคำสั่งแล้ว`, 
-        `<p>คำขอ ${requestId} ได้รับการอนุมัติและออกคำสั่งเรียบร้อยแล้ว</p><p><a href="${selectedUrl}">คลิกเพื่อดูคำสั่ง</a></p>`);
+      sendNotificationEmail(
+        username,
+        `[WNY App] คำขอ ${requestId} อนุมัติและออกคำสั่งแล้ว`,
+        `<p>คำขอ ${requestId} ได้รับการอนุมัติและออกคำสั่งเรียบร้อยแล้ว</p><p><a href="${selectedUrl}">คลิกเพื่อดูคำสั่ง</a></p>`,
+      );
     }
 
-    return { 
-        status: "success", 
-        message: "อนุมัติคำสั่งและสร้างรายการบันทึกข้อความอัตโนมัติเรียบร้อยแล้ว", 
-        data: { pdfUrl: selectedUrl, docUrl: selectedDocUrl } 
+    return {
+      status: "success",
+      message: "อนุมัติคำสั่งและสร้างรายการบันทึกข้อความอัตโนมัติเรียบร้อยแล้ว",
+      data: { pdfUrl: selectedUrl, docUrl: selectedDocUrl },
     };
   }
-  
+
   return { status: "error", message: "บันทึกข้อมูลไม่สำเร็จ (ไม่พบ URL ไฟล์)" };
 }
 
 function generateDispatchBook(payload) {
-  const { 
-    requestId, 
-    dispatchMonth, 
-    dispatchYear, 
-    commandCount, 
-    memoCount, 
+  const {
+    requestId,
+    dispatchMonth,
+    dispatchYear,
+    commandCount,
+    memoCount,
     preGeneratedPdfUrl, // รับค่า URL ที่สร้างจาก Cloud Run (ถ้ามี)
-    createdby 
+    createdby,
   } = payload;
 
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -1201,7 +1517,9 @@ function generateDispatchBook(payload) {
   const data = requestSheet.getDataRange().getValues();
   const headers = data[0];
   const idCol = findColumnIndex(headers, "RequestId");
-  const rowIndex = data.findIndex(row => String(row[idCol]) === String(requestId));
+  const rowIndex = data.findIndex(
+    (row) => String(row[idCol]) === String(requestId),
+  );
 
   if (rowIndex === -1) return { status: "error", message: "ไม่พบคำขอ" };
 
@@ -1210,70 +1528,79 @@ function generateDispatchBook(payload) {
 
   // กรณี A: มีลิงก์ส่งมาจากหน้าเว็บแล้ว (สร้างด้วย Cloud Run -> Drive เรียบร้อย)
   if (preGeneratedPdfUrl) {
-      pdfUrl = preGeneratedPdfUrl;
-  } 
+    pdfUrl = preGeneratedPdfUrl;
+  }
   // กรณี B: ไม่มีลิงก์ (Fallback ให้ GAS สร้างเองแบบเดิม)
   else {
-      // ดึงข้อมูลเดิมจาก Sheet มาเตรียมสร้างไฟล์
-      const requestDataRow = data[rowIndex];
-      const requestDataObject = headers.reduce((obj, header, i) => {
-        let val = requestDataRow[i];
-        if (val instanceof Date) val = Utilities.formatDate(val, "Asia/Bangkok", "yyyy-MM-dd");
-        obj[header] = val;
-        return obj;
-      }, {});
-      
-      const attendeesData = getAttendeesForRequest(requestId);
-      const docNumber = requestId.split("/")[0].replace("บค", "");
+    // ดึงข้อมูลเดิมจาก Sheet มาเตรียมสร้างไฟล์
+    const requestDataRow = data[rowIndex];
+    const requestDataObject = headers.reduce((obj, header, i) => {
+      let val = requestDataRow[i];
+      if (val instanceof Date)
+        val = Utilities.formatDate(val, "Asia/Bangkok", "yyyy-MM-dd");
+      obj[header] = val;
+      return obj;
+    }, {});
 
-      const pdfPayload = {
-        requesterName: requestDataObject.RequesterName,
-        docDate: requestDataObject.DocDate, 
-        startDate: requestDataObject.StartDate,
-        endDate: requestDataObject.EndDate,
-        purpose: requestDataObject.Purpose,
-        location: requestDataObject.Location,
-        requesterPosition: requestDataObject.RequesterPosition,
-        department: requestDataObject.Department,
-        headName: requestDataObject.HeadName,
-        vehicleOption: requestDataObject.VehicleOption,
-        licensePlate: requestDataObject.LicensePlate,
-        expenseOption: requestDataObject.ExpenseOption,
-        expenseItems: requestDataObject.ExpenseItems,
-        totalExpense: requestDataObject.TotalExpense,
-        attendees: attendeesData || [],
-        dispatchMonth: dispatchMonth,
-        dispatchYear: dispatchYear,
-        commandCount: commandCount,
-        memoCount: memoCount,
-        username: createdby || requestDataObject.CreatedBy,
-      };
+    const attendeesData = getAttendeesForRequest(requestId);
+    const docNumber = requestId.split("/")[0].replace("บค", "");
 
-      // สร้างไฟล์ด้วย GAS Native
-      const files = createPdfFromTemplate(pdfPayload, requestId, docNumber, DISPATCH_BOOK_TEMPLATE_ID, "หนังสือส่งเขต");
-      if (files) pdfUrl = files.pdfUrl;
+    const pdfPayload = {
+      requesterName: requestDataObject.RequesterName,
+      docDate: requestDataObject.DocDate,
+      startDate: requestDataObject.StartDate,
+      endDate: requestDataObject.EndDate,
+      purpose: requestDataObject.Purpose,
+      location: requestDataObject.Location,
+      requesterPosition: requestDataObject.RequesterPosition,
+      department: requestDataObject.Department,
+      headName: requestDataObject.HeadName,
+      vehicleOption: requestDataObject.VehicleOption,
+      licensePlate: requestDataObject.LicensePlate,
+      expenseOption: requestDataObject.ExpenseOption,
+      expenseItems: requestDataObject.ExpenseItems,
+      totalExpense: requestDataObject.TotalExpense,
+      attendees: attendeesData || [],
+      dispatchMonth: dispatchMonth,
+      dispatchYear: dispatchYear,
+      commandCount: commandCount,
+      memoCount: memoCount,
+      username: createdby || requestDataObject.CreatedBy,
+    };
+
+    // สร้างไฟล์ด้วย GAS Native
+    const files = createPdfFromTemplate(
+      pdfPayload,
+      requestId,
+      docNumber,
+      DISPATCH_BOOK_TEMPLATE_ID,
+      "หนังสือส่งเขต",
+    );
+    if (files) pdfUrl = files.pdfUrl;
   }
 
   // --- บันทึก URL ลง Sheet ---
   if (pdfUrl) {
     payload.preGeneratedPdfUrl = pdfUrl; // ใส่ URL เข้าไปใน Payload
     saveDispatchRecord(payload); // <--- เรียกใช้ฟังก์ชันที่เพิ่มไปในข้อ 1
-    
+
     // โค้ดบันทึกลงชีท Requests เดิมเพื่อให้ Dashboard แสดงปุ่มดาวน์โหลดได้
     ensureSheetColumns(requestSheet, ["DispatchBookPdfUrl"]);
-    const newHeaders = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+    const newHeaders = requestSheet
+      .getRange(1, 1, 1, requestSheet.getLastColumn())
+      .getValues()[0];
     const urlCol = findColumnIndex(newHeaders, "DispatchBookPdfUrl");
     if (urlCol > -1) {
       requestSheet.getRange(rowIndex + 1, urlCol + 1).setValue(pdfUrl);
     }
-    
-    return { 
-        status: "success", 
-        message: "สร้างหนังสือส่งและบันทึกข้อมูลเรียบร้อยแล้ว", 
-        data: { pdfUrl: pdfUrl } 
+
+    return {
+      status: "success",
+      message: "สร้างหนังสือส่งและบันทึกข้อมูลเรียบร้อยแล้ว",
+      data: { pdfUrl: pdfUrl },
     };
   }
-  
+
   return { status: "error", message: "สร้างไฟล์ไม่สำเร็จ" };
 }
 
@@ -1285,18 +1612,26 @@ function generateDispatchBook(payload) {
  * ฟังก์ชันสร้าง PDF จาก Google Docs Template
  * แก้ไขให้รองรับข้อมูล Hybrid และจัดการตัวเลขไทยครบถ้วน
  */
-function createPdfFromTemplate(data, requestId, docNumber, templateId, filePrefix = "Memo") {
+function createPdfFromTemplate(
+  data,
+  requestId,
+  docNumber,
+  templateId,
+  filePrefix = "Memo",
+) {
   const username = data.username || data.CreatedBy;
   const userFolder = getOrCreateUserFolder(username);
 
   // 1. จัดการวันที่ให้เป็น Object ที่ถูกต้อง
   let startDate, endDate, docDate;
   try {
-    startDate = new Date(data.startDate); 
+    startDate = new Date(data.startDate);
     endDate = new Date(data.endDate);
     docDate = new Date(data.docDate);
   } catch (e) {
-    startDate = new Date(); endDate = new Date(); docDate = new Date();
+    startDate = new Date();
+    endDate = new Date();
+    docDate = new Date();
   }
 
   // 2. คัดลอกไฟล์จาก Template
@@ -1307,30 +1642,53 @@ function createPdfFromTemplate(data, requestId, docNumber, templateId, filePrefi
   const body = tempDoc.getBody();
 
   // 3. คำนวณข้อมูลพื้นฐาน
-  const duration = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  const buddhistYear = parseInt(Utilities.formatDate(docDate, "Asia/Bangkok", "yyyy")) + 543;
-  const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  const duration =
+    Math.round(
+      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+    ) + 1;
+  const buddhistYear =
+    parseInt(Utilities.formatDate(docDate, "Asia/Bangkok", "yyyy")) + 543;
+  const thaiMonths = [
+    "มกราคม",
+    "กุมภาพันธ์",
+    "มีนาคม",
+    "เมษายน",
+    "พฤษภาคม",
+    "มิถุนายน",
+    "กรกฎาคม",
+    "สิงหาคม",
+    "กันยายน",
+    "ตุลาคม",
+    "พฤศจิกายน",
+    "ธันวาคม",
+  ];
   const thaiMonth = thaiMonths[docDate.getMonth()];
 
   // 4. จัดการรายชื่อผู้ร่วมเดินทาง (รวมผู้ขอและผู้ติดตาม)
   let attendeesList = [];
   try {
-    attendeesList = typeof data.attendees === "string" ? JSON.parse(data.attendees) : (data.attendees || []);
+    attendeesList =
+      typeof data.attendees === "string"
+        ? JSON.parse(data.attendees)
+        : data.attendees || [];
   } catch (e) {
     attendeesList = [];
   }
 
-  const allPeople = [{ name: data.requesterName, position: data.requesterPosition }];
-  attendeesList.forEach(att => {
+  const allPeople = [
+    { name: data.requesterName, position: data.requesterPosition },
+  ];
+  attendeesList.forEach((att) => {
     const attName = (att.name || "").trim();
-    if (attName && !allPeople.some(p => p.name === attName)) {
+    if (attName && !allPeople.some((p) => p.name === attName)) {
       allPeople.push({ name: attName, position: att.position || "" });
     }
   });
 
   // 5. แทนที่ข้อความทั่วไป (Text Replacement)
-  const replace = (tag, val) => body.replaceText(`{{${tag}}}`, toThaiNumerals(val || ""));
-  
+  const replace = (tag, val) =>
+    body.replaceText(`{{${tag}}}`, toThaiNumerals(val || ""));
+
   replace("id", requestId);
   replace("doc_number", docNumber);
   replace("YYYY", buddhistYear);
@@ -1361,7 +1719,7 @@ function createPdfFromTemplate(data, requestId, docNumber, templateId, filePrefi
   // 6. จัดการ Checkbox (ค่าใช้จ่ายและยานพาหนะ)
   const checked = "✓";
   const unchecked = " ";
-  const check = (opt, val) => opt === val ? checked : unchecked;
+  const check = (opt, val) => (opt === val ? checked : unchecked);
 
   body.replaceText("{{expense_no}}", check(data.expenseOption, "no"));
   body.replaceText("{{expense_partial}}", check(data.expenseOption, "partial"));
@@ -1372,20 +1730,36 @@ function createPdfFromTemplate(data, requestId, docNumber, templateId, filePrefi
   // รายการค่าใช้จ่าย
   let expenseItems = [];
   try {
-    expenseItems = typeof data.expenseItems === "string" ? JSON.parse(data.expenseItems) : (data.expenseItems || []);
-  } catch (e) { expenseItems = []; }
+    expenseItems =
+      typeof data.expenseItems === "string"
+        ? JSON.parse(data.expenseItems)
+        : data.expenseItems || [];
+  } catch (e) {
+    expenseItems = [];
+  }
 
-  const hasItem = (name) => expenseItems.some(item => (item.name || item) === name) ? checked : unchecked;
+  const hasItem = (name) =>
+    expenseItems.some((item) => (item.name || item) === name)
+      ? checked
+      : unchecked;
   body.replaceText("{{expense_allowance}}", hasItem("ค่าเบี้ยเลี้ยง"));
   body.replaceText("{{expense_food}}", hasItem("ค่าอาหาร"));
   body.replaceText("{{expense_accommodation}}", hasItem("ค่าที่พัก"));
   body.replaceText("{{expense_transport}}", hasItem("ค่าพาหนะ"));
   body.replaceText("{{expense_fuel}}", hasItem("ค่าน้ำมัน"));
-  
-  const otherItem = expenseItems.find(i => (i.name || i) === "ค่าใช้จ่ายอื่นๆ");
+
+  const otherItem = expenseItems.find(
+    (i) => (i.name || i) === "ค่าใช้จ่ายอื่นๆ",
+  );
   body.replaceText("{{expense_other_check}}", otherItem ? checked : unchecked);
-  body.replaceText("{{expense_other_text}}", otherItem ? toThaiNumerals(otherItem.detail || "") : "");
-  body.replaceText("{{expense_total}}", toThaiNumerals(formatThaiCurrency(data.totalExpense)));
+  body.replaceText(
+    "{{expense_other_text}}",
+    otherItem ? toThaiNumerals(otherItem.detail || "") : "",
+  );
+  body.replaceText(
+    "{{expense_total}}",
+    toThaiNumerals(formatThaiCurrency(data.totalExpense)),
+  );
 
   // 7. จัดการตารางรายชื่อผู้เดินทาง
   const tables = body.getTables();
@@ -1423,18 +1797,31 @@ function formatDateRangeThai(startDateStr, endDateStr) {
   if (!startDateStr || !endDateStr) return "";
   const startDate = new Date(startDateStr);
   const endDate = new Date(endDateStr);
-  
+
   const get = (d, fmt) => Utilities.formatDate(d, "Asia/Bangkok", fmt);
   const startDay = parseInt(get(startDate, "d"));
   const endDay = parseInt(get(endDate, "d"));
-  const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  const thaiMonths = [
+    "มกราคม",
+    "กุมภาพันธ์",
+    "มีนาคม",
+    "เมษายน",
+    "พฤษภาคม",
+    "มิถุนายน",
+    "กรกฎาคม",
+    "สิงหาคม",
+    "กันยายน",
+    "ตุลาคม",
+    "พฤศจิกายน",
+    "ธันวาคม",
+  ];
   const startMonthIdx = parseInt(get(startDate, "M")) - 1;
   const endMonthIdx = parseInt(get(endDate, "M")) - 1;
   const startMonth = thaiMonths[startMonthIdx];
   const endMonth = thaiMonths[endMonthIdx];
   const startYear = parseInt(get(startDate, "yyyy")) + 543;
   const endYear = parseInt(get(endDate, "yyyy")) + 543;
-// ✅ แก้ไข GAS-BUG-003: ลบ null check ซ้ำที่อยู่ผิดตำแหน่ง (มีอยู่แล้วบรรทัดแรก)
+  // ✅ แก้ไข GAS-BUG-003: ลบ null check ซ้ำที่อยู่ผิดตำแหน่ง (มีอยู่แล้วบรรทัดแรก)
   if (startDateStr.substring(0, 10) === endDateStr.substring(0, 10)) {
     return `${startDay} ${startMonth} ${startYear}`; // ลบคำว่า "วันที่"
   }
@@ -1449,10 +1836,25 @@ function thaiDateFormat(isoDate) {
   const date = new Date(isoDate);
   if (isNaN(date.getTime())) return "";
 
-  const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  const thaiMonths = [
+    "มกราคม",
+    "กุมภาพันธ์",
+    "มีนาคม",
+    "เมษายน",
+    "พฤษภาคม",
+    "มิถุนายน",
+    "กรกฎาคม",
+    "สิงหาคม",
+    "กันยายน",
+    "ตุลาคม",
+    "พฤศจิกายน",
+    "ธันวาคม",
+  ];
   const day = parseInt(Utilities.formatDate(date, "Asia/Bangkok", "d"));
-  const monthIdx = parseInt(Utilities.formatDate(date, "Asia/Bangkok", "M")) - 1;
-  const year = parseInt(Utilities.formatDate(date, "Asia/Bangkok", "yyyy")) + 543;
+  const monthIdx =
+    parseInt(Utilities.formatDate(date, "Asia/Bangkok", "M")) - 1;
+  const year =
+    parseInt(Utilities.formatDate(date, "Asia/Bangkok", "yyyy")) + 543;
 
   // คืนค่าเฉพาะตัวเลขและชื่อเดือน (ลบคำว่า "วันที่" ออก)
   return `${day} ${thaiMonths[monthIdx]} ${year}`;
@@ -1496,13 +1898,13 @@ function sheetToObject(sheet) {
         if (key === "commandpdfurlsolo") key = "commandPdfUrlSolo";
         if (key === "commanddocurlsolo") key = "commandDocUrlSolo";
         // URL ไฟล์ที่สำคัญ — ต้อง map camelCase ให้ตรงกับที่ frontend อ่าน
-        if (key === "completedmemourl")    key = "completedMemoUrl";
+        if (key === "completedmemourl") key = "completedMemoUrl";
         if (key === "completedcommandurl") key = "completedCommandUrl";
-        if (key === "adminmemourl")        key = "adminMemoUrl";
-        if (key === "dispatchbookurl")     key = "dispatchBookUrl";
-        if (key === "docstatus")           key = "docStatus";
-        if (key === "wasrejected")         key = "wasRejected";
-        if (key === "rejectionreason")     key = "rejectionReason";
+        if (key === "adminmemourl") key = "adminMemoUrl";
+        if (key === "dispatchbookurl") key = "dispatchBookUrl";
+        if (key === "docstatus") key = "docStatus";
+        if (key === "wasrejected") key = "wasRejected";
+        if (key === "rejectionreason") key = "rejectionReason";
         if (key === "commandpdfurlgroupsmall") key = "commandPdfUrlGroupSmall";
         if (key === "commanddocurlgroupsmall") key = "commandDocUrlGroupSmall"; // Add docUrl mapping
         if (key === "commandpdfurlgrouplarge") key = "commandPdfUrlGroupLarge";
@@ -1518,7 +1920,7 @@ function sheetToObject(sheet) {
         if (key === "completedcommandurl") key = "completedCommandUrl";
         if (key === "dispatchbookurl") key = "dispatchBookUrl";
       } else if (sheetName === "Users") {
-        if (key === "loginname") key = "loginName";   // ← เพิ่มบรรทัดนี้
+        if (key === "loginname") key = "loginName"; // ← เพิ่มบรรทัดนี้
         if (key === "fullname") key = "fullName";
         if (key === "email") key = "email";
         if (key === "specialposition") key = "specialPosition";
@@ -1557,7 +1959,8 @@ function findColumnIndex(headers, columnName) {
 function ensureSheetColumns(sheet, requiredColumns) {
   if (!sheet) return;
   const lastColumn = sheet.getLastColumn();
-  const headers = lastColumn > 0 ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0] : [];
+  const headers =
+    lastColumn > 0 ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0] : [];
   const columnsToAdd = [];
   requiredColumns.forEach((col) => {
     if (!headers.some((h) => h.toLowerCase() === col.toLowerCase())) {
@@ -1565,7 +1968,9 @@ function ensureSheetColumns(sheet, requiredColumns) {
     }
   });
   if (columnsToAdd.length > 0) {
-    sheet.getRange(1, headers.length + 1, 1, columnsToAdd.length).setValues([columnsToAdd]);
+    sheet
+      .getRange(1, headers.length + 1, 1, columnsToAdd.length)
+      .setValues([columnsToAdd]);
   }
 }
 
@@ -1582,7 +1987,10 @@ function toThaiNumerals(input) {
 
 function formatThaiCurrency(num) {
   if (num === null || num === undefined || isNaN(num)) return "๐.๐๐";
-  let formattedNum = Number(num).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let formattedNum = Number(num).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
   // The caller will handle toThaiNumerals
   return formattedNum;
 }
@@ -1593,206 +2001,267 @@ function formatThaiCurrency(num) {
 
 function uploadMemo(payload) {
   // รับ fileUrl (ลิงก์ที่อัปโหลดแล้ว) เพิ่มเข้ามา
-  const { refNumber, file, username, memoType, fileUrl } = payload; 
-  
-  const memoSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Memos");
+  const { refNumber, file, username, memoType, fileUrl } = payload;
+
+  const memoSheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Memos");
   if (!memoSheet) throw new Error("Sheet 'Memos' not found.");
 
   const memoId = `MEMO-${Date.now()}`;
   const timestamp = new Date();
   let status = "กำลังดำเนินการ";
-  let fileId = "", finalFileUrl = "";
+  let fileId = "",
+    finalFileUrl = "";
   let updateRequestCommandStatus = false;
-  
+
   if (memoType === "reimburse") {
     status = "เสร็จสิ้นรอออกคำสั่งไปราชการ";
     updateRequestCommandStatus = true;
   } else {
     // --- ส่วนที่แก้ไข: รองรับทั้งไฟล์แนบ (เก่า) และ ลิงก์ (ใหม่) ---
     if (file) {
-        // กรณี A: ส่งไฟล์มาเป็น Base64 (ระบบเดิม) -> สร้างไฟล์ลง Drive
-        const decodedData = Utilities.base64Decode(file.data, Utilities.Charset.UTF_8);
-        const blob = Utilities.newBlob(decodedData, file.mimeType, file.filename);
-        const userFolder = getOrCreateUserFolder(username);
-        const newFile = userFolder.createFile(blob);
-        fileId = newFile.getId();
-        finalFileUrl = newFile.getUrl();
+      // กรณี A: ส่งไฟล์มาเป็น Base64 (ระบบเดิม) -> สร้างไฟล์ลง Drive
+      const decodedData = Utilities.base64Decode(
+        file.data,
+        Utilities.Charset.UTF_8,
+      );
+      const blob = Utilities.newBlob(decodedData, file.mimeType, file.filename);
+      const userFolder = getOrCreateUserFolder(username);
+      const newFile = userFolder.createFile(blob);
+      fileId = newFile.getId();
+      finalFileUrl = newFile.getUrl();
     } else if (fileUrl) {
-        // กรณี B: ส่งลิงก์มา (ระบบใหม่แนบ 3 ไฟล์) -> ใช้ลิงก์นั้นเลย
-        finalFileUrl = fileUrl;
-        // พยายามแกะ ID จากลิงก์ (ถ้าทำได้)
-        try {
-            const match = fileUrl.match(/\/d\/(.*?)\//);
-            if (match) fileId = match[1];
-        } catch(e) {}
+      // กรณี B: ส่งลิงก์มา (ระบบใหม่แนบ 3 ไฟล์) -> ใช้ลิงก์นั้นเลย
+      finalFileUrl = fileUrl;
+      // พยายามแกะ ID จากลิงก์ (ถ้าทำได้)
+      try {
+        const match = fileUrl.match(/\/d\/(.*?)\//);
+        if (match) fileId = match[1];
+      } catch (e) {}
     } else {
-        throw new Error("File data is required."); // ยังคงแจ้งเตือนถ้าไม่มีอะไรส่งมาเลย
+      throw new Error("File data is required."); // ยังคงแจ้งเตือนถ้าไม่มีอะไรส่งมาเลย
     }
   }
 
   // บันทึกลง Sheet
   memoSheet.appendRow([
-      memoId, 
-      username, 
-      refNumber, 
-      status, 
-      timestamp, 
-      fileId, 
-      finalFileUrl, // ใช้ URL ที่ได้ (ไม่ว่าจะจากไฟล์ใหม่ หรือลิงก์ที่ส่งมา)
-      "", "", ""
+    memoId,
+    username,
+    refNumber,
+    status,
+    timestamp,
+    fileId,
+    finalFileUrl, // ใช้ URL ที่ได้ (ไม่ว่าจะจากไฟล์ใหม่ หรือลิงก์ที่ส่งมา)
+    "",
+    "",
+    "",
   ]);
 
   // อัปเดตสถานะใน Sheet Requests
-  const requestSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
+  const requestSheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
   const data = requestSheet.getDataRange().getValues();
   const reqIdCol = findColumnIndex(data[0], "RequestId");
   const statusCol = findColumnIndex(data[0], "Status");
   const cmdStatusCol = findColumnIndex(data[0], "CommandStatus");
-  const rowIndex = data.findIndex(row => String(row[reqIdCol]) === String(refNumber));
-  
+  const rowIndex = data.findIndex(
+    (row) => String(row[reqIdCol]) === String(refNumber),
+  );
+
   if (rowIndex > 0) {
-    if (statusCol > -1) requestSheet.getRange(rowIndex + 1, statusCol + 1).setValue("Submitted");
+    if (statusCol > -1)
+      requestSheet.getRange(rowIndex + 1, statusCol + 1).setValue("Submitted");
     if (updateRequestCommandStatus && cmdStatusCol > -1) {
-      requestSheet.getRange(rowIndex + 1, cmdStatusCol + 1).setValue("เสร็จสิ้นรอออกคำสั่งไปราชการ");
+      requestSheet
+        .getRange(rowIndex + 1, cmdStatusCol + 1)
+        .setValue("เสร็จสิ้นรอออกคำสั่งไปราชการ");
+    }
+    // อัปเดต docStatus ถ้ามีการส่งมา
+    if (payload.forwardToStatus) {
+      const docStatusCol = findColumnIndex(data[0], "DocStatus");
+      if (docStatusCol > -1)
+        requestSheet
+          .getRange(rowIndex + 1, docStatusCol + 1)
+          .setValue(payload.forwardToStatus);
     }
   }
 
   // แจ้งเตือน Admin (ถ้ามีฟังก์ชันนี้)
   try {
-      if (typeof notifyAdmins === 'function') {
-          notifyAdmins(`ผู้ใช้ส่งบันทึกข้อความเข้าระบบ: ${refNumber}`, `
+    if (typeof notifyAdmins === "function") {
+      notifyAdmins(
+        `ผู้ใช้ส่งบันทึกข้อความเข้าระบบ: ${refNumber}`,
+        `
             <p>ผู้ใช้ <strong>${username}</strong> ได้ส่งไฟล์บันทึกข้อความเข้าระบบ</p>
             <p><strong>สำหรับคำขอเลขที่:</strong> ${refNumber}</p>
             <p>กรุณาตรวจสอบในระบบ</p>
-          `);
-      }
-  } catch(e) { Logger.log("Email notify error: " + e.message); }
+          `,
+      );
+    }
+  } catch (e) {
+    Logger.log("Email notify error: " + e.message);
+  }
 
-  return { 
-    status: "success", 
+  return {
+    status: "success",
     message: "อัปโหลดบันทึกข้อความสำเร็จ",
-    data: { fileUrl: finalFileUrl }
+    data: { fileUrl: finalFileUrl },
   };
 }
 
 function getAllMemos() {
-  const memoSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Memos");
+  const memoSheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Memos");
   if (!memoSheet) return [];
   const memos = sheetToObject(memoSheet);
   const requests = getAllRequests();
-  const requestMap = requests.reduce((map, req) => { map[req.id] = req; return map; }, {});
-  return memos.map(memo => {
+  const requestMap = requests.reduce((map, req) => {
+    map[req.id] = req;
+    return map;
+  }, {});
+  return memos.map((memo) => {
     const req = requestMap[memo.refNumber];
-    memo.dispatchBookUrl = req ? (req.dispatchBookPdfUrl || "") : "";
+    memo.dispatchBookUrl = req ? req.dispatchBookPdfUrl || "" : "";
     return memo;
   });
 }
 
 function getSentMemos(username) {
-  return getAllMemos().filter(m => m.submittedBy === username);
+  return getAllMemos().filter((m) => m.submittedBy === username);
 }
 
 function updateMemoStatus(payload) {
-  const { id, status, completedMemoFile, completedCommandFile, dispatchBookFile } = payload;
+  const {
+    id,
+    status,
+    completedMemoFile,
+    completedCommandFile,
+    dispatchBookFile,
+  } = payload;
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName("Memos");
-  
+
   // ตรวจสอบและสร้างคอลัมน์เก็บลิงก์ถ้ายังไม่มี
-  ensureSheetColumns(sheet, ["CompletedMemoUrl", "CompletedCommandUrl", "DispatchBookUrl"]);
-  
+  ensureSheetColumns(sheet, [
+    "CompletedMemoUrl",
+    "CompletedCommandUrl",
+    "DispatchBookUrl",
+  ]);
+
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const idCol = findColumnIndex(headers, "MemoID");
-  
+
   // ค้นหาแถวที่ตรงกับ MemoID
-  const rowIndex = data.findIndex(row => String(row[idCol]) === String(id));
-  
+  const rowIndex = data.findIndex((row) => String(row[idCol]) === String(id));
+
   if (rowIndex > -1) {
     const rowNum = rowIndex + 1;
     const rowData = data[rowIndex];
-    
+
     const userCol = findColumnIndex(headers, "SubmittedBy");
     const refCol = findColumnIndex(headers, "RefNumber");
     const fileUrlCol = findColumnIndex(headers, "FileURL");
-    
+
     const username = userCol > -1 ? rowData[userCol] : null;
     const refNumber = refCol > -1 ? rowData[refCol] : "N/A";
 
     // --- กรณีที่ 1: ส่งคืน/แก้ไข (ลบข้อมูลเดิม) ---
     if (status === "นำกลับไปแก้ไข") {
-        if (fileUrlCol > -1) {
-            const fileUrl = rowData[fileUrlCol];
-            deleteFileByUrl(fileUrl); // ลบไฟล์ต้นฉบับ
-        }
+      if (fileUrlCol > -1) {
+        const fileUrl = rowData[fileUrlCol];
+        deleteFileByUrl(fileUrl); // ลบไฟล์ต้นฉบับ
+      }
 
-        // อัปเดตสถานะใน Sheet "Requests" ด้วย
-        const reqSheet = ss.getSheetByName("Requests");
-        const reqData = reqSheet.getDataRange().getValues();
-        const reqIdCol = findColumnIndex(reqData[0], "RequestId");
-        const reqStatusCol = findColumnIndex(reqData[0], "Status");
-        const reqRowIndex = reqData.findIndex(r => String(r[reqIdCol]) === String(refNumber));
-        
-        if (reqRowIndex > 0 && reqStatusCol > -1) {
-             reqSheet.getRange(reqRowIndex + 1, reqStatusCol + 1).setValue("นำกลับไปแก้ไข");
-        }
+      // อัปเดตสถานะใน Sheet "Requests" ด้วย
+      const reqSheet = ss.getSheetByName("Requests");
+      const reqData = reqSheet.getDataRange().getValues();
+      const reqIdCol = findColumnIndex(reqData[0], "RequestId");
+      const reqStatusCol = findColumnIndex(reqData[0], "Status");
+      const reqRowIndex = reqData.findIndex(
+        (r) => String(r[reqIdCol]) === String(refNumber),
+      );
 
-        if (username) {
-           sendNotificationEmail(username, `[WNY App] แจ้งแก้ไขคำขอ ${refNumber}`, 
-             `<p>คำขอ ${refNumber} ถูกส่งคืนเพื่อแก้ไข<br>กรุณาตรวจสอบและส่งบันทึกข้อความใหม่อีกครั้ง</p>`);
-        }
-        
-        // ลบแถวออกจาก Memos
-        sheet.deleteRow(rowNum);
-        return { status: "success", message: "ลบไฟล์เดิมและส่งกลับไปแก้ไขเรียบร้อยแล้ว" };
+      if (reqRowIndex > 0 && reqStatusCol > -1) {
+        reqSheet
+          .getRange(reqRowIndex + 1, reqStatusCol + 1)
+          .setValue("นำกลับไปแก้ไข");
+      }
+
+      if (username) {
+        sendNotificationEmail(
+          username,
+          `[WNY App] แจ้งแก้ไขคำขอ ${refNumber}`,
+          `<p>คำขอ ${refNumber} ถูกส่งคืนเพื่อแก้ไข<br>กรุณาตรวจสอบและส่งบันทึกข้อความใหม่อีกครั้ง</p>`,
+        );
+      }
+
+      // ลบแถวออกจาก Memos
+      sheet.deleteRow(rowNum);
+      return {
+        status: "success",
+        message: "ลบไฟล์เดิมและส่งกลับไปแก้ไขเรียบร้อยแล้ว",
+      };
     }
 
     // --- กรณีที่ 2: อัปเดตสถานะปกติ / เสร็จสิ้น ---
     const statusCol = findColumnIndex(headers, "Status");
     if (statusCol > -1) sheet.getRange(rowNum, statusCol + 1).setValue(status);
-    
+
     const userFolder = getOrCreateUserFolder(username);
-    
+
     // ตัวแปรสำหรับเก็บ URL เพื่อส่งกลับไปหน้าเว็บ
-    let returnUrls = {}; 
+    let returnUrls = {};
 
     // ฟังก์ชันย่อยสำหรับอัปโหลดไฟล์
     const upload = (file, colName, keyName) => {
       if (!file) return;
       const col = findColumnIndex(headers, colName);
       if (col === -1) return;
-      
+
       // สร้างไฟล์ใน Google Drive
-      const blob = Utilities.newBlob(Utilities.base64Decode(file.data, Utilities.Charset.UTF_8), file.mimeType, file.filename);
+      const blob = Utilities.newBlob(
+        Utilities.base64Decode(file.data, Utilities.Charset.UTF_8),
+        file.mimeType,
+        file.filename,
+      );
       const newFile = userFolder.createFile(blob);
       const url = newFile.getUrl();
-      
+
       // บันทึก URL ลง Google Sheet
       sheet.getRange(rowNum, col + 1).setValue(url);
-      
+
       // เก็บ URL ลงตัวแปรเพื่อส่งกลับ
-      if (keyName) returnUrls[keyName] = url; 
+      if (keyName) returnUrls[keyName] = url;
     };
 
     if (status === "เสร็จสิ้น/รับไฟล์ไปใช้งาน") {
       // อัปโหลดไฟล์และเก็บ URL
       upload(completedMemoFile, "CompletedMemoUrl", "completedMemoUrl");
-      upload(completedCommandFile, "CompletedCommandUrl", "completedCommandUrl");
+      upload(
+        completedCommandFile,
+        "CompletedCommandUrl",
+        "completedCommandUrl",
+      );
       upload(dispatchBookFile, "DispatchBookUrl", "dispatchBookUrl");
-      
+
       if (username) sendCompletionEmail(refNumber, username, status);
-      
     } else if (username) {
-      sendNotificationEmail(username, `[WNY App] อัปเดตสถานะ ${refNumber}`, `<p>สถานะใหม่: ${status}</p>`);
+      sendNotificationEmail(
+        username,
+        `[WNY App] อัปเดตสถานะ ${refNumber}`,
+        `<p>สถานะใหม่: ${status}</p>`,
+      );
     }
 
     // ★ ส่ง URLs กลับไปให้หน้าเว็บเพื่อบันทึกลง Firestore ★
-    return { 
-      status: "success", 
+    return {
+      status: "success",
       message: "อัปเดตเรียบร้อยแล้ว",
-      data: returnUrls 
+      data: returnUrls,
     };
   }
-  
+
   return { status: "error", message: "ไม่พบบันทึกข้อความ" };
 }
 
@@ -1803,7 +2272,8 @@ function getUserEmail(username) {
   const emailCol = findColumnIndex(data[0], "Email");
   if (userCol === -1 || emailCol === -1) return null;
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][userCol]).trim() === String(username).trim()) return data[i][emailCol];
+    if (String(data[i][userCol]).trim() === String(username).trim())
+      return data[i][emailCol];
   }
   return null;
 }
@@ -1811,14 +2281,15 @@ function getUserEmail(username) {
 // New Admin Notification Logic
 function getAdminEmails() {
   try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Users");
+    const sheet =
+      SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Users");
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     const emailCol = findColumnIndex(headers, "Email");
     const roleCol = findColumnIndex(headers, "Role");
-    
+
     if (emailCol === -1 || roleCol === -1) return [];
-    
+
     const adminEmails = [];
     for (let i = 1; i < data.length; i++) {
       const email = data[i][emailCol];
@@ -1837,14 +2308,14 @@ function getAdminEmails() {
 function notifyAdmins(subject, htmlBody) {
   const admins = getAdminEmails();
   if (admins.length === 0) return;
-  
-  admins.forEach(email => {
+
+  admins.forEach((email) => {
     try {
       MailApp.sendEmail({
         to: email,
         subject: `[Admin Alert] ${subject}`,
         htmlBody: htmlBody,
-        name: "ระบบ WNY App (Admin Alert)"
+        name: "ระบบ WNY App (Admin Alert)",
       });
     } catch (e) {
       Logger.log(`Failed to send email to ${email}: ${e.message}`);
@@ -1856,8 +2327,15 @@ function sendNotificationEmail(username, subject, body) {
   const email = getUserEmail(username);
   if (email) {
     try {
-      MailApp.sendEmail({ to: email, subject: subject, htmlBody: body, name: "ระบบแจ้งเตือน WNY App" });
-    } catch (e) { Logger.log("Email failed: " + e.message); }
+      MailApp.sendEmail({
+        to: email,
+        subject: subject,
+        htmlBody: body,
+        name: "ระบบแจ้งเตือน WNY App",
+      });
+    } catch (e) {
+      Logger.log("Email failed: " + e.message);
+    }
   }
 }
 
@@ -1879,20 +2357,36 @@ function deleteFileByUrl(url) {
   try {
     const id = url.match(/\/d\/(.*?)\//)?.[1] || url.match(/id=([^&]+)/)?.[1];
     if (id) DriveApp.getFileById(id).setTrashed(true);
-  } catch (e) { Logger.log("Delete file error: " + e.message); }
+  } catch (e) {
+    Logger.log("Delete file error: " + e.message);
+  }
 }
 
 function deleteOldPdfFiles(requestId) {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
+  const sheet =
+    SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Requests");
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const idCol = findColumnIndex(headers, "RequestId");
-  const rowIndex = data.findIndex(row => String(row[idCol]) === String(requestId));
-  
+  const rowIndex = data.findIndex(
+    (row) => String(row[idCol]) === String(requestId),
+  );
+
   if (rowIndex > 0) {
     const row = data[rowIndex];
     // Clean up all related files (PDF & Docs)
-    ["PdfUrl", "DocUrl", "CommandPdfUrl", "CommandPdfUrlSolo", "CommandDocUrlSolo", "CommandPdfUrlGroupSmall", "CommandDocUrlGroupSmall", "CommandPdfUrlGroupLarge", "CommandDocUrlGroupLarge", "DispatchBookPdfUrl"].forEach(colName => {
+    [
+      "PdfUrl",
+      "DocUrl",
+      "CommandPdfUrl",
+      "CommandPdfUrlSolo",
+      "CommandDocUrlSolo",
+      "CommandPdfUrlGroupSmall",
+      "CommandDocUrlGroupSmall",
+      "CommandPdfUrlGroupLarge",
+      "CommandDocUrlGroupLarge",
+      "DispatchBookPdfUrl",
+    ].forEach((colName) => {
       const colIdx = findColumnIndex(headers, colName);
       if (colIdx > -1) deleteFileByUrl(row[colIdx]);
     });
@@ -1905,57 +2399,83 @@ function deleteOldPdfFiles(requestId) {
 function generateCommand(data) {
   try {
     // ✅ แก้ไข GAS-BUG-005: ตรวจสอบ data.id ก่อนใช้ .split() เพื่อป้องกัน TypeError
-    if (!data || !data.id) return { status: "error", message: "ไม่พบรหัสเอกสาร (data.id is required)" };
-    
+    if (!data || !data.id)
+      return {
+        status: "error",
+        message: "ไม่พบรหัสเอกสาร (data.id is required)",
+      };
+
     // 1. เลือก Template ID
-    let templateId = COMMAND_TEMPLATE_SOLO_ID; 
-    if (data.templateType === 'groupSmall') templateId = COMMAND_TEMPLATE_GROUP_SMALL_ID;
-    if (data.templateType === 'groupLarge') templateId = COMMAND_TEMPLATE_GROUP_LARGE_ID;
+    let templateId = COMMAND_TEMPLATE_SOLO_ID;
+    if (data.templateType === "groupSmall")
+      templateId = COMMAND_TEMPLATE_GROUP_SMALL_ID;
+    if (data.templateType === "groupLarge")
+      templateId = COMMAND_TEMPLATE_GROUP_LARGE_ID;
 
     const docNumber = data.id.split("/")[0].replace("บค", "");
     const filePrefix = `คำสั่ง_${data.templateType}`;
 
     // 2. เรียกฟังก์ชันสร้างไฟล์
-    const result = createPdfFromTemplate(data, data.id, docNumber, templateId, filePrefix);
-    
+    const result = createPdfFromTemplate(
+      data,
+      data.id,
+      docNumber,
+      templateId,
+      filePrefix,
+    );
+
     // 3. ✅ คืนค่าโดยห่อใส่ object "data" (เพื่อให้หน้าเว็บอ่านเจอ)
     return {
       status: "success",
-      data: { 
+      data: {
         docUrl: result.docUrl,
-        pdfUrl: result.pdfUrl
-      }
+        pdfUrl: result.pdfUrl,
+      },
     };
-
   } catch (error) {
     Logger.log("generateCommand Error: " + error.message);
-    return { status: "error", message: "ไม่สามารถสร้างคำสั่งได้: " + error.message };
+    return {
+      status: "error",
+      message: "ไม่สามารถสร้างคำสั่งได้: " + error.message,
+    };
   }
 }
 
 function generateDispatch(data) {
   try {
     // ✅ แก้ไข GAS-BUG-005: ตรวจสอบ data.id ก่อนใช้ .split() เพื่อป้องกัน TypeError
-    if (!data || !data.id) return { status: "error", message: "ไม่พบรหัสเอกสาร (data.id is required)" };
-    
+    if (!data || !data.id)
+      return {
+        status: "error",
+        message: "ไม่พบรหัสเอกสาร (data.id is required)",
+      };
+
     const templateId = DISPATCH_BOOK_TEMPLATE_ID;
     const docNumber = data.id.split("/")[0].replace("บค", "");
     const filePrefix = "หนังสือส่ง";
 
-    const result = createPdfFromTemplate(data, data.id, docNumber, templateId, filePrefix);
+    const result = createPdfFromTemplate(
+      data,
+      data.id,
+      docNumber,
+      templateId,
+      filePrefix,
+    );
 
     // ✅ คืนค่าโดยห่อใส่ object "data"
     return {
       status: "success",
-      data: { 
+      data: {
         docUrl: result.docUrl,
-        pdfUrl: result.pdfUrl
-      }
+        pdfUrl: result.pdfUrl,
+      },
     };
-
   } catch (error) {
     Logger.log("generateDispatch Error: " + error.message);
-    return { status: "error", message: "ไม่สามารถสร้างหนังสือส่งได้: " + error.message };
+    return {
+      status: "error",
+      message: "ไม่สามารถสร้างหนังสือส่งได้: " + error.message,
+    };
   }
 }
 // --- ฟังก์ชันสำหรับดึงข้อมูลตามปีงบประมาณ ---
@@ -1963,60 +2483,65 @@ function getRequestsByYear(yearBE, username) {
   // 1. แปลงปี พ.ศ. (BE) เป็น ค.ศ. (AD) เพราะ Date object ใช้ ค.ศ.
   // เช่น รับมา 2569 -> ลบ 543 = 2026
   var targetYearAD = parseInt(yearBE) - 543;
-  
+
   // 2. ดึงข้อมูลทั้งหมดมาก่อน (ใช้ฟังก์ชันเดิมที่มีอยู่แล้ว)
-  var allData = getAllRequests(); 
-  
+  var allData = getAllRequests();
+
   // 3. กรองข้อมูล (Filter)
-  var filteredData = allData.filter(function(item) {
+  var filteredData = allData.filter(function (item) {
     if (!item.docDate) return false; // ถ้าไม่มีวันที่ ข้ามไป
-    
+
     // แปลงวันที่ใน Sheet เป็นปี ค.ศ.
     var itemDate = new Date(item.docDate);
     var itemYear = itemDate.getFullYear();
-    
+
     // เงื่อนไข 1: ปีต้องตรงกัน
-    var yearMatch = (itemYear === targetYearAD);
-    
+    var yearMatch = itemYear === targetYearAD;
+
     // เงื่อนไข 2: Username ต้องตรงกัน (หรือถ้าเป็น ADMIN_ALL คือเอาทั้งหมด)
-    var userMatch = (username === 'ADMIN_ALL') || (item.username === username);
-    
+    var userMatch = username === "ADMIN_ALL" || item.username === username;
+
     return yearMatch && userMatch;
   });
-  
+
   return filteredData;
 }
 // --- ส่วนที่ต้องเพิ่มใน Google Apps Script (Code.gs) ---
 
 // ⚠️ สำคัญ: ให้ไปสร้างโฟลเดอร์ใน Google Drive สำหรับเก็บ Backup แล้วเอา ID มาใส่ตรงนี้
-const BACKUP_FOLDER_ID = "1CmVTM6_kkp7mXs2AsHYP3sECxDonNcT-"; 
+const BACKUP_FOLDER_ID = "1CmVTM6_kkp7mXs2AsHYP3sECxDonNcT-";
 
 function doSystemBackup() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const timeStamp = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd_HH-mm");
+    const timeStamp = Utilities.formatDate(
+      new Date(),
+      "GMT+7",
+      "yyyy-MM-dd_HH-mm",
+    );
     const backupName = `Backup_WNY_Data_${timeStamp}`;
-    
 
-if (!BACKUP_FOLDER_ID) {
-   throw new Error("ยังไม่ได้ตั้งค่า BACKUP_FOLDER_ID ใน Code.gs");
-}
+    if (!BACKUP_FOLDER_ID) {
+      throw new Error("ยังไม่ได้ตั้งค่า BACKUP_FOLDER_ID ใน Code.gs");
+    }
 
     // 2. เข้าถึงโฟลเดอร์ปลายทาง
     const folder = DriveApp.getFolderById(BACKUP_FOLDER_ID);
-    
+
     // 3. สร้างสำเนาไฟล์ Google Sheet ไปเก็บไว้
-    const backupFile = DriveApp.getFileById(ss.getId()).makeCopy(backupName, folder);
-    
-    return { 
-      status: 'success', 
-      message: `สำรองข้อมูลเรียบร้อยแล้ว: ${backupName}`, 
-      url: backupFile.getUrl() 
+    const backupFile = DriveApp.getFileById(ss.getId()).makeCopy(
+      backupName,
+      folder,
+    );
+
+    return {
+      status: "success",
+      message: `สำรองข้อมูลเรียบร้อยแล้ว: ${backupName}`,
+      url: backupFile.getUrl(),
     };
-    
   } catch (error) {
     Logger.log("Backup Error: " + error.toString());
-    return { status: 'error', message: error.toString() };
+    return { status: "error", message: error.toString() };
   }
 }
 // --- ฟังก์ชันลบบันทึกข้อความ (Memos) ---
@@ -2052,24 +2577,27 @@ function deleteMemo(payload) {
 function uploadGeneratedFile(payload) {
   try {
     const { data, filename, mimeType, username } = payload;
-    const userFolder = getOrCreateUserFolder(username || 'admin');
-    
-    const blob = Utilities.newBlob(Utilities.base64Decode(data), mimeType, filename);
+    const userFolder = getOrCreateUserFolder(username || "admin");
+
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(data),
+      mimeType,
+      filename,
+    );
     const file = userFolder.createFile(blob);
-    
+
     // ★★★ เพิ่มบรรทัดนี้ เพื่อให้ทุกคนที่มีลิงก์เปิดดูไฟล์ได้ ★★★
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    
+
     return {
-      status: 'success',
+      status: "success",
       url: file.getUrl(),
-      id: file.getId()
+      id: file.getId(),
     };
   } catch (error) {
-    return { status: 'error', message: error.toString() };
+    return { status: "error", message: error.toString() };
   }
 }
-
 
 /**
  * ฟังก์ชันบันทึกข้อมูลหนังสือส่งแยกชีท โดยใช้ RequestId เป็นเลขอ้างอิง
@@ -2078,17 +2606,34 @@ function saveDispatchRecord(payload) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     let sheet = ss.getSheetByName("DispatchRecords");
-    
+
     // 1. ถ้ายังไม่มีชีท ให้สร้างอัตโนมัติพร้อมหัวข้อ
     if (!sheet) {
       sheet = ss.insertSheet("DispatchRecords");
       sheet.appendRow([
-        "RequestId", "DispatchMonth", "DispatchYear", "StudentCount", 
-        "TeacherCount", "StayAt", "VehicleType", "VehicleId", 
-        "Qty1", "Qty2", "Qty3", "Qty4", "Qty5", "Qty6", "Qty7", 
-        "PdfUrl", "Timestamp", "CreatedBy"
+        "RequestId",
+        "DispatchMonth",
+        "DispatchYear",
+        "StudentCount",
+        "TeacherCount",
+        "StayAt",
+        "VehicleType",
+        "VehicleId",
+        "Qty1",
+        "Qty2",
+        "Qty3",
+        "Qty4",
+        "Qty5",
+        "Qty6",
+        "Qty7",
+        "PdfUrl",
+        "Timestamp",
+        "CreatedBy",
       ]);
-      sheet.getRange(1, 1, 1, 18).setFontWeight("bold").setBackground("#f3f3f3");
+      sheet
+        .getRange(1, 1, 1, 18)
+        .setFontWeight("bold")
+        .setBackground("#f3f3f3");
     }
 
     // 2. เตรียมข้อมูลบันทึก (Mapping ตามหัวข้อ)
@@ -2101,15 +2646,23 @@ function saveDispatchRecord(payload) {
       payload.stayAt || "-",
       payload.vehicleType || "-",
       payload.vehicleId || "-",
-      payload.qty1 || "๑", payload.qty2 || "๑", payload.qty3 || "๑",
-      payload.qty4 || "๑", payload.qty5 || "๑", payload.qty6 || "๑", payload.qty7 || "๑",
+      payload.qty1 || "๑",
+      payload.qty2 || "๑",
+      payload.qty3 || "๑",
+      payload.qty4 || "๑",
+      payload.qty5 || "๑",
+      payload.qty6 || "๑",
+      payload.qty7 || "๑",
       payload.preGeneratedPdfUrl || payload.pdfUrl || "",
       new Date(),
-      payload.createdby || "admin"
+      payload.createdby || "admin",
     ];
 
     sheet.appendRow(rowData);
-    return { status: "success", message: "บันทึกข้อมูลลงชีท DispatchRecords สำเร็จ" };
+    return {
+      status: "success",
+      message: "บันทึกข้อมูลลงชีท DispatchRecords สำเร็จ",
+    };
   } catch (error) {
     Logger.log("Error in saveDispatchRecord: " + error.message);
     return { status: "error", message: error.message };
@@ -2118,8 +2671,15 @@ function saveDispatchRecord(payload) {
 function setupSpreadsheets() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   // เพิ่ม "DispatchRecords" เข้าไปในรายการนี้
-  const sheets = ["Users", "Requests", "Attendees", "Memos", "DraftRequests", "DispatchRecords"];
-  sheets.forEach(name => {
+  const sheets = [
+    "Users",
+    "Requests",
+    "Attendees",
+    "Memos",
+    "DraftRequests",
+    "DispatchRecords",
+  ];
+  sheets.forEach((name) => {
     if (!ss.getSheetByName(name)) ss.insertSheet(name);
   });
   Logger.log("Setup complete");
@@ -2130,7 +2690,15 @@ function adminUpdateUser(payload) {
     lock.waitLock(10000); // ป้องกันการบันทึกชนกัน
 
     // รับค่าจาก Frontend
-    const { username, loginName, fullName, position, department, role, newPassword } = payload;
+    const {
+      username,
+      loginName,
+      fullName,
+      position,
+      department,
+      role,
+      newPassword,
+    } = payload;
     // username = Internal ID (ใช้ค้นหาแถว)
     // loginName = ชื่อล็อกอินใหม่ (ใช้บันทึก)
 
@@ -2138,40 +2706,44 @@ function adminUpdateUser(payload) {
     const sheet = ss.getSheetByName("Users");
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
-    
+
     const usernameCol = findColumnIndex(headers, "Username");
     const loginNameCol = findColumnIndex(headers, "LoginName");
 
     // 1. ตรวจสอบความซ้ำซ้อนของ Login Name ใหม่
     // (ต้องไม่ซ้ำกับ LoginName ของคนอื่น และไม่ซ้ำกับ Username ของคนอื่นด้วย เพื่อความปลอดภัย)
     for (let i = 1; i < data.length; i++) {
-        const rowId = String(data[i][usernameCol]);
-        const rowLogin = (loginNameCol > -1) ? String(data[i][loginNameCol]) : "";
-        
-        // ข้ามแถวของตัวเอง (ถ้าเจอตัวเองให้ข้ามไป)
-        if (rowId === username) continue;
+      const rowId = String(data[i][usernameCol]);
+      const rowLogin = loginNameCol > -1 ? String(data[i][loginNameCol]) : "";
 
-        // เช็คซ้ำ
-        if (rowLogin === loginName || rowId === loginName) {
-            return { status: "error", message: "ชื่อล็อกอิน '" + loginName + "' มีผู้อื่นใช้งานแล้ว" };
-        }
+      // ข้ามแถวของตัวเอง (ถ้าเจอตัวเองให้ข้ามไป)
+      if (rowId === username) continue;
+
+      // เช็คซ้ำ
+      if (rowLogin === loginName || rowId === loginName) {
+        return {
+          status: "error",
+          message: "ชื่อล็อกอิน '" + loginName + "' มีผู้อื่นใช้งานแล้ว",
+        };
+      }
     }
 
     // 2. หาแถวและอัปเดต
     let rowIndex = -1;
-    for(let i=1; i<data.length; i++){
-        if(String(data[i][usernameCol]) === String(username)){
-            rowIndex = i + 1;
-            break;
-        }
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][usernameCol]) === String(username)) {
+        rowIndex = i + 1;
+        break;
+      }
     }
 
-    if (rowIndex === -1) return { status: "error", message: "ไม่พบข้อมูลผู้ใช้ในระบบ" };
+    if (rowIndex === -1)
+      return { status: "error", message: "ไม่พบข้อมูลผู้ใช้ในระบบ" };
 
     // ฟังก์ชันช่วยบันทึก
     const setVal = (colName, val) => {
-        const col = findColumnIndex(headers, colName);
-        if (col > -1) sheet.getRange(rowIndex, col + 1).setValue(val);
+      const col = findColumnIndex(headers, colName);
+      if (col > -1) sheet.getRange(rowIndex, col + 1).setValue(val);
     };
 
     // บันทึกข้อมูล
@@ -2180,13 +2752,12 @@ function adminUpdateUser(payload) {
     setVal("Position", position);
     setVal("Department", department);
     setVal("Role", role);
-    
+
     if (newPassword && newPassword.trim() !== "") {
-        setVal("Password", newPassword.trim());
+      setVal("Password", newPassword.trim());
     }
 
     return { status: "success", message: "อัปเดตข้อมูลสำเร็จ" };
-
   } catch (error) {
     return { status: "error", message: "Update Error: " + error.message };
   } finally {
@@ -2194,12 +2765,12 @@ function adminUpdateUser(payload) {
   }
 }
 /**
- * ฟังก์ชันสำหรับอัปเดตข้อมูลใน Google Sheets 
+ * ฟังก์ชันสำหรับอัปเดตข้อมูลใน Google Sheets
  * รองรับการ Sync ข้อมูลจากหน้าเว็บ, การอัปเดตสถานะ, และการแนบลิงก์ไฟล์
  */
 function updateRequest(payload) {
   Logger.log("📥 Update Request Payload: " + JSON.stringify(payload));
-  
+
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName("Requests");
 
@@ -2207,137 +2778,171 @@ function updateRequest(payload) {
 
   // 1. ค้นหาแถวที่ต้องอัปเดตจาก RequestId
   const requestId = payload.id || payload.requestId;
-  if (!requestId) return { status: "error", message: "Payload ไม่ระบุ RequestId" };
+  if (!requestId)
+    return { status: "error", message: "Payload ไม่ระบุ RequestId" };
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const idColIndex = findColumnIndex(headers, "RequestId");
 
-  if (idColIndex === -1) return { status: "error", message: "ไม่พบคอลัมน์ RequestId ใน Sheet" };
+  if (idColIndex === -1)
+    return { status: "error", message: "ไม่พบคอลัมน์ RequestId ใน Sheet" };
 
-  const rowIndex = data.findIndex(row => String(row[idColIndex]) === String(requestId));
+  const rowIndex = data.findIndex(
+    (row) => String(row[idColIndex]) === String(requestId),
+  );
 
   if (rowIndex === -1) {
-    return { status: "error", message: "ไม่พบรหัสคำขอ " + requestId + " ในระบบ" };
+    return {
+      status: "error",
+      message: "ไม่พบรหัสคำขอ " + requestId + " ในระบบ",
+    };
   }
 
   const rowNum = rowIndex + 1;
 
   // 2. สร้าง Map ของ Headers เพื่อความแม่นยำ (Key เป็นตัวเล็กหมด)
   const headerMap = {};
-  headers.forEach((h, i) => headerMap[h.toLowerCase().replace(/\s+/g, '')] = i + 1);
+  headers.forEach(
+    (h, i) => (headerMap[h.toLowerCase().replace(/\s+/g, "")] = i + 1),
+  );
 
   // ฟังก์ชันช่วยเขียนข้อมูล (เช็คว่ามี Column นี้จริงไหม)
   const setVal = (key, val) => {
-      const col = headerMap[key.toLowerCase().replace(/\s+/g, '')];
-      if (col && val !== undefined && val !== null) {
-          sheet.getRange(rowNum, col).setValue(val);
-      }
+    const col = headerMap[key.toLowerCase().replace(/\s+/g, "")];
+    if (col && val !== undefined && val !== null) {
+      sheet.getRange(rowNum, col).setValue(val);
+    }
   };
 
   // --- 3. อัปเดตข้อมูลตาม Payload ---
-  
+
   // A. ข้อมูลทั่วไป (วนลูป Key ใน Payload เพื่อความยืดหยุ่น)
   // วิธีนี้จะช่วยให้อัปเดตฟิลด์ไหนก็ได้ที่ส่งมา ถ้าชื่อตรงกับ Header
   for (const key in payload) {
-      if (payload.hasOwnProperty(key)) {
-          // ข้าม keys พิเศษที่จัดการแยกด้านล่าง
-          if (['id', 'requestId', 'action', 'pdfUrl', 'docUrl', 'fileUrl'].includes(key)) continue;
-          
-          // ✅ แก้ไข GAS-BUG-007: ข้าม Array/Object เพื่อป้องกันการบันทึก "[object Object]" ลงชีท
-          const val = payload[key];
-          if (typeof val === 'object' && val !== null) continue;
-          
-          setVal(key, val);
-      }
+    if (payload.hasOwnProperty(key)) {
+      // ข้าม keys พิเศษที่จัดการแยกด้านล่าง
+      if (
+        ["id", "requestId", "action", "pdfUrl", "docUrl", "fileUrl"].includes(
+          key,
+        )
+      )
+        continue;
+
+      // ✅ แก้ไข GAS-BUG-007: ข้าม Array/Object เพื่อป้องกันการบันทึก "[object Object]" ลงชีท
+      const val = payload[key];
+      if (typeof val === "object" && val !== null) continue;
+
+      setVal(key, val);
+    }
   }
 
   // --- แก้ไขช่วง B. จัดการลิงก์ไฟล์ ---
-  const pdfUrlValue = payload.pdfUrl || payload.fileUrl || payload.preGeneratedPdfUrl;
-  
+  const pdfUrlValue =
+    payload.pdfUrl || payload.fileUrl || payload.preGeneratedPdfUrl;
+
   if (pdfUrlValue) {
-      setVal("PdfUrl", pdfUrlValue);      // ช่องหลัก
-      setVal("FileUrl", pdfUrlValue);     // เผื่อ Dashboard ใช้ช่องนี้
-      setVal("MemoPdfUrl", pdfUrlValue);  // เผื่อ Dashboard ใช้ช่องนี้
-      
-      // อัปเดต DocUrl ด้วยถ้ามี
-      const docUrlValue = payload.docUrl || payload.preGeneratedDocUrl;
-      if (docUrlValue) setVal("DocUrl", docUrlValue);
+    setVal("PdfUrl", pdfUrlValue); // ช่องหลัก
+    setVal("FileUrl", pdfUrlValue); // เผื่อ Dashboard ใช้ช่องนี้
+    setVal("MemoPdfUrl", pdfUrlValue); // เผื่อ Dashboard ใช้ช่องนี้
+
+    // อัปเดต DocUrl ด้วยถ้ามี
+    const docUrlValue = payload.docUrl || payload.preGeneratedDocUrl;
+    if (docUrlValue) setVal("DocUrl", docUrlValue);
   }
   // C. จัดการลิงก์เฉพาะเจาะจง
   // ตรวจสอบให้แน่ใจว่าคอลัมน์ URL มีอยู่ก่อนเขียน (สำหรับแถวเก่าที่ไม่มีคอลัมน์เหล่านี้)
   const urlCols = [];
-  if (payload.completedMemoUrl)    urlCols.push("CompletedMemoUrl");
+  if (payload.completedMemoUrl) urlCols.push("CompletedMemoUrl");
   if (payload.completedCommandUrl) urlCols.push("CompletedCommandUrl");
-  if (payload.adminMemoUrl)        urlCols.push("AdminMemoUrl");
-  if (payload.dispatchBookUrl)     urlCols.push("DispatchBookUrl");
-  if (payload.dispatchBookPdfUrl)  urlCols.push("DispatchBookPdfUrl");
+  if (payload.adminMemoUrl) urlCols.push("AdminMemoUrl");
+  if (payload.dispatchBookUrl) urlCols.push("DispatchBookUrl");
+  if (payload.dispatchBookPdfUrl) urlCols.push("DispatchBookPdfUrl");
   if (urlCols.length) {
     ensureSheetColumns(sheet, urlCols);
     // โหลด headerMap ใหม่หลังจาก ensureSheetColumns เผื่อมีคอลัมน์ใหม่เพิ่มเข้ามา
-    const newHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    newHeaders.forEach((h, i) => { headerMap[h.toLowerCase().replace(/\s+/g, '')] = i + 1; });
+    const newHeaders = sheet
+      .getRange(1, 1, 1, sheet.getLastColumn())
+      .getValues()[0];
+    newHeaders.forEach((h, i) => {
+      headerMap[h.toLowerCase().replace(/\s+/g, "")] = i + 1;
+    });
   }
-  if (payload.completedMemoUrl)    setVal("CompletedMemoUrl", payload.completedMemoUrl);
-  if (payload.completedCommandUrl) setVal("CompletedCommandUrl", payload.completedCommandUrl);
-  if (payload.adminMemoUrl)        setVal("AdminMemoUrl", payload.adminMemoUrl);
+  if (payload.completedMemoUrl)
+    setVal("CompletedMemoUrl", payload.completedMemoUrl);
+  if (payload.completedCommandUrl)
+    setVal("CompletedCommandUrl", payload.completedCommandUrl);
+  if (payload.adminMemoUrl) setVal("AdminMemoUrl", payload.adminMemoUrl);
 
   // หนังสือส่ง (รองรับทั้ง key: dispatchBookPdfUrl และ dispatchBookUrl)
-  if (payload.dispatchBookPdfUrl) setVal("DispatchBookPdfUrl", payload.dispatchBookPdfUrl);
-  if (payload.dispatchBookUrl)    setVal("DispatchBookUrl", payload.dispatchBookUrl);
+  if (payload.dispatchBookPdfUrl)
+    setVal("DispatchBookPdfUrl", payload.dispatchBookPdfUrl);
+  if (payload.dispatchBookUrl)
+    setVal("DispatchBookUrl", payload.dispatchBookUrl);
 
   // D. อัปเดตสถานะ (ถ้ามี)
-  if (payload.status)        setVal("Status", payload.status);
+  if (payload.status) setVal("Status", payload.status);
   if (payload.commandStatus) setVal("CommandStatus", payload.commandStatus);
-  if (payload.docStatus)     setVal("DocStatus", payload.docStatus);
-  if (payload.wasRejected !== undefined) setVal("WasRejected", payload.wasRejected);
-  if (payload.rejectionReason) setVal("RejectionReason", payload.rejectionReason);
+  if (payload.docStatus) setVal("DocStatus", payload.docStatus);
+  if (payload.wasRejected !== undefined)
+    setVal("WasRejected", payload.wasRejected);
+  if (payload.rejectionReason)
+    setVal("RejectionReason", payload.rejectionReason);
 
   // E. อัปเดต Timestamp การแก้ไข
   setVal("Timestamp", new Date());
 
-  return { status: "success", message: "อัปเดตข้อมูล " + requestId + " เรียบร้อยแล้ว" };
+  return {
+    status: "success",
+    message: "อัปเดตข้อมูล " + requestId + " เรียบร้อยแล้ว",
+  };
 }
 function createAutoMemoRecord(requestId, username) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const memoSheet = ss.getSheetByName("Memos");
   const requestSheet = ss.getSheetByName("Requests");
-  
+
   // 1. ตรวจสอบว่ามี Memo ของ Request นี้อยู่แล้วหรือยัง?
   const memoData = memoSheet.getDataRange().getValues();
   const refCol = findColumnIndex(memoData[0], "RefNumber");
-  
-  for(let i=1; i<memoData.length; i++) {
-     if(String(memoData[i][refCol]) === String(requestId)) {
-        return; // มีอยู่แล้ว ไม่สร้างซ้ำ
-     }
+
+  for (let i = 1; i < memoData.length; i++) {
+    if (String(memoData[i][refCol]) === String(requestId)) {
+      return; // มีอยู่แล้ว ไม่สร้างซ้ำ
+    }
   }
 
   // 2. ถ้ายังไม่มี ให้สร้างใหม่
   const memoId = `MEMO-AUTO-${Date.now()}`;
   const timestamp = new Date();
-  
+
   // ตั้งสถานะเป็น "รอการตรวจสอบ" หรือ "Submitted" เพื่อให้เด้งในหน้า Admin
   // แต่ไม่มี FileURL เพราะเป็น Auto
   memoSheet.appendRow([
-      memoId, 
-      username, 
-      requestId, 
-      "รอการตรวจสอบ", // Status ที่จะทำให้ Admin เห็นปุ่มจัดการ
-      timestamp, 
-      "", // FileID (ว่างไว้)
-      "", // FileURL (ว่างไว้ เพราะรอ Admin อัปโหลดไฟล์สมบูรณ์)
-      "", "", "" // ช่อง URL ไฟล์สมบูรณ์ (ว่างไว้)
+    memoId,
+    username,
+    requestId,
+    "รอการตรวจสอบ", // Status ที่จะทำให้ Admin เห็นปุ่มจัดการ
+    timestamp,
+    "", // FileID (ว่างไว้)
+    "", // FileURL (ว่างไว้ เพราะรอ Admin อัปโหลดไฟล์สมบูรณ์)
+    "",
+    "",
+    "", // ช่อง URL ไฟล์สมบูรณ์ (ว่างไว้)
   ]);
-  
+
   // 3. อัปเดตสถานะใน Requests ให้รู้ว่ามีการส่ง Memo แล้ว (User จะได้ไม่ต้องกดซ้ำ)
   const reqData = requestSheet.getDataRange().getValues();
   const reqIdCol = findColumnIndex(reqData[0], "RequestId");
   const reqStatusCol = findColumnIndex(reqData[0], "Status");
-  
-  const reqRowIndex = reqData.findIndex(row => String(row[reqIdCol]) === String(requestId));
+
+  const reqRowIndex = reqData.findIndex(
+    (row) => String(row[reqIdCol]) === String(requestId),
+  );
   if (reqRowIndex > 0 && reqStatusCol > -1) {
-     requestSheet.getRange(reqRowIndex + 1, reqStatusCol + 1).setValue("Submitted"); // หรือ "รอการตรวจสอบ"
+    requestSheet
+      .getRange(reqRowIndex + 1, reqStatusCol + 1)
+      .setValue("Submitted"); // หรือ "รอการตรวจสอบ"
   }
 }
 
@@ -2360,22 +2965,47 @@ function batchSyncFromFirestore(payload) {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const requestSheet = ss.getSheetByName("Requests");
     ensureSheetColumns(requestSheet, [
-      "RequestId", "CreatedBy", "DocDate", "RequesterName", "RequesterPosition",
-      "Location", "Purpose", "StartDate", "EndDate", "ExpenseOption", "ExpenseItems",
-      "TotalExpense", "VehicleOption", "LicensePlate", "Department", "HeadName",
-      "PdfUrl", "DocUrl", "CommandPdfUrl", "CommandStatus", "Status",
-      "DispatchBookPdfUrl", "Province", "StayAt", "CompletedMemoUrl", "Timestamp",
-      "SyncedFromFirestore", "FirestoreSyncedAt"
+      "RequestId",
+      "CreatedBy",
+      "DocDate",
+      "RequesterName",
+      "RequesterPosition",
+      "Location",
+      "Purpose",
+      "StartDate",
+      "EndDate",
+      "ExpenseOption",
+      "ExpenseItems",
+      "TotalExpense",
+      "VehicleOption",
+      "LicensePlate",
+      "Department",
+      "HeadName",
+      "PdfUrl",
+      "DocUrl",
+      "CommandPdfUrl",
+      "CommandStatus",
+      "Status",
+      "DispatchBookPdfUrl",
+      "Province",
+      "StayAt",
+      "CompletedMemoUrl",
+      "Timestamp",
+      "SyncedFromFirestore",
+      "FirestoreSyncedAt",
     ]);
 
-    const headers = requestSheet.getRange(1, 1, 1, requestSheet.getLastColumn()).getValues()[0];
+    const headers = requestSheet
+      .getRange(1, 1, 1, requestSheet.getLastColumn())
+      .getValues()[0];
     const idCol = findColumnIndex(headers, "RequestId");
 
     // อ่านข้อมูลที่มีอยู่ใน Sheet ทั้งหมด (เพื่อเช็คว่ามีแถวนี้แล้วหรือยัง)
     const existingData = requestSheet.getDataRange().getValues();
     const existingIds = new Set();
     for (let i = 1; i < existingData.length; i++) {
-      if (existingData[i][idCol]) existingIds.add(String(existingData[i][idCol]).trim());
+      if (existingData[i][idCol])
+        existingIds.add(String(existingData[i][idCol]).trim());
     }
 
     let upsertedCount = 0;
@@ -2387,7 +3017,15 @@ function batchSyncFromFirestore(payload) {
 
       const formatDate = (d) => {
         if (!d) return "";
-        try { return Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd"); } catch(e) { return d; }
+        try {
+          return Utilities.formatDate(
+            new Date(d),
+            "Asia/Bangkok",
+            "yyyy-MM-dd",
+          );
+        } catch (e) {
+          return d;
+        }
       };
 
       const rowObject = {
@@ -2401,7 +3039,10 @@ function batchSyncFromFirestore(payload) {
         startdate: formatDate(req.startDate),
         enddate: formatDate(req.endDate),
         expenseoption: req.expenseOption || "",
-        expenseitems: typeof req.expenseItems === 'object' ? JSON.stringify(req.expenseItems) : (req.expenseItems || ""),
+        expenseitems:
+          typeof req.expenseItems === "object"
+            ? JSON.stringify(req.expenseItems)
+            : req.expenseItems || "",
         totalexpense: Number(req.totalExpense) || 0,
         vehicleoption: req.vehicleOption || "",
         licenseplate: req.licensePlate || "",
@@ -2418,19 +3059,23 @@ function batchSyncFromFirestore(payload) {
         completedmemourl: req.completedMemoUrl || "",
         timestamp: formatDate(req.timestamp || req.docDate),
         syncedfromfirestore: "TRUE",
-        firestoresyncedat: syncedAt || new Date().toISOString()
+        firestoresyncedat: syncedAt || new Date().toISOString(),
       };
 
-      const rowData = headers.map(h => {
+      const rowData = headers.map((h) => {
         const key = h.toLowerCase().replace(/\s+/g, "");
         return rowObject[key] !== undefined ? rowObject[key] : "";
       });
 
       if (existingIds.has(requestId)) {
         // Update แถวที่มีอยู่แล้ว
-        const rowIdx = existingData.findIndex(r => String(r[idCol]).trim() === requestId);
+        const rowIdx = existingData.findIndex(
+          (r) => String(r[idCol]).trim() === requestId,
+        );
         if (rowIdx > 0) {
-          requestSheet.getRange(rowIdx + 1, 1, 1, rowData.length).setValues([rowData]);
+          requestSheet
+            .getRange(rowIdx + 1, 1, 1, rowData.length)
+            .setValues([rowData]);
           upsertedCount++;
         }
       } else {
@@ -2441,15 +3086,16 @@ function batchSyncFromFirestore(payload) {
       }
     }
 
-    Logger.log(`✅ Batch sync complete: ${insertedCount} inserted, ${upsertedCount} updated`);
+    Logger.log(
+      `✅ Batch sync complete: ${insertedCount} inserted, ${upsertedCount} updated`,
+    );
     return {
       status: "success",
       message: `Sync เสร็จสิ้น: เพิ่มใหม่ ${insertedCount} รายการ, อัปเดต ${upsertedCount} รายการ`,
       inserted: insertedCount,
       updated: upsertedCount,
-      total: insertedCount + upsertedCount
+      total: insertedCount + upsertedCount,
     };
-
   } catch (error) {
     Logger.log("batchSyncFromFirestore Error: " + error.message);
     return { status: "error", message: error.message };
@@ -2464,17 +3110,19 @@ function setupMonthlyBackupTrigger() {
   // ลบ trigger เก่าที่มีชื่อเดียวกัน (ป้องกัน duplicate)
   const triggers = ScriptApp.getProjectTriggers();
   for (const t of triggers) {
-    if (t.getHandlerFunction() === 'runMonthlyBackupEmail') {
+    if (t.getHandlerFunction() === "runMonthlyBackupEmail") {
       ScriptApp.deleteTrigger(t);
     }
   }
   // สร้าง trigger ใหม่: ทุกวันที่ 1 ของเดือน เวลา 02:00-03:00
-  ScriptApp.newTrigger('runMonthlyBackupEmail')
+  ScriptApp.newTrigger("runMonthlyBackupEmail")
     .timeBased()
     .onMonthDay(1)
     .atHour(2)
     .create();
-  Logger.log('✅ Monthly backup trigger created (runs on 1st of each month at 2am)');
+  Logger.log(
+    "✅ Monthly backup trigger created (runs on 1st of each month at 2am)",
+  );
 }
 
 /**
@@ -2485,11 +3133,23 @@ function runMonthlyBackupEmail() {
   try {
     const admins = getAdminEmails();
     if (admins.length === 0) {
-      Logger.log('No admin emails found for monthly backup notification');
+      Logger.log("No admin emails found for monthly backup notification");
       return;
     }
-    const monthNames = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
-                        'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+    const monthNames = [
+      "มกราคม",
+      "กุมภาพันธ์",
+      "มีนาคม",
+      "เมษายน",
+      "พฤษภาคม",
+      "มิถุนายน",
+      "กรกฎาคม",
+      "สิงหาคม",
+      "กันยายน",
+      "ตุลาคม",
+      "พฤศจิกายน",
+      "ธันวาคม",
+    ];
     const now = new Date();
     const monthTH = monthNames[now.getMonth()];
     const yearBE = now.getFullYear() + 543;
@@ -2504,14 +3164,23 @@ function runMonthlyBackupEmail() {
         <p style="color: #6b7280; font-size: 0.9em;">อีเมลนี้ส่งอัตโนมัติทุกวันที่ 1 ของเดือน</p>
       </div>
     `;
-    admins.forEach(email => {
+    admins.forEach((email) => {
       try {
-        MailApp.sendEmail({ to: email, subject, htmlBody: body, name: 'ระบบ WNY App' });
-      } catch(e) { Logger.log('Email failed for ' + email + ': ' + e.message); }
+        MailApp.sendEmail({
+          to: email,
+          subject,
+          htmlBody: body,
+          name: "ระบบ WNY App",
+        });
+      } catch (e) {
+        Logger.log("Email failed for " + email + ": " + e.message);
+      }
     });
-    Logger.log('✅ Monthly backup reminder emails sent to: ' + admins.join(', '));
+    Logger.log(
+      "✅ Monthly backup reminder emails sent to: " + admins.join(", "),
+    );
   } catch (error) {
-    Logger.log('runMonthlyBackupEmail Error: ' + error.message);
+    Logger.log("runMonthlyBackupEmail Error: " + error.message);
   }
 }
 // ==================================================================
@@ -2527,7 +3196,9 @@ function getArchiveRequests(yearParam) {
   const sheet = ss.getSheetByName("Requests");
   if (!sheet) return [];
 
-  const yearBE = yearParam ? parseInt(yearParam) : (new Date().getFullYear() + 543);
+  const yearBE = yearParam
+    ? parseInt(yearParam)
+    : new Date().getFullYear() + 543;
   const yearAD = yearBE - 543;
   const yearStr = String(yearBE);
 
@@ -2537,48 +3208,55 @@ function getArchiveRequests(yearParam) {
   const memoIndex = {};
   const memosSheet = ss.getSheetByName("Memos");
   if (memosSheet) {
-    sheetToObject(memosSheet).forEach(memo => {
-      const key = String(memo.refNumber || memo.id || '').trim();
+    sheetToObject(memosSheet).forEach((memo) => {
+      const key = String(memo.refNumber || memo.id || "").trim();
       if (key) memoIndex[key] = memo;
     });
   }
 
   const rows = sheetToObject(sheet);
-  return rows.filter(r => {
-    // กรองตามปี พ.ศ. จาก id (บค001/2568) หรือ docDate (2025-xx-xx)
-    if (r.id && String(r.id).includes('/' + yearStr)) return true;
-    if (r.docDate && String(r.docDate).startsWith(String(yearAD))) return true;
-    return false;
-  }).map(r => {
-    // --- เติม URL จาก Memos sheet ถ้า Requests sheet ยังไม่มี ---
-    const memo = memoIndex[String(r.id || '').trim()];
-    if (memo) {
-      if (!r.adminMemoUrl        && memo.completedMemoUrl)    r.adminMemoUrl        = memo.completedMemoUrl;
-      if (!r.completedMemoUrl    && memo.completedMemoUrl)    r.completedMemoUrl    = memo.completedMemoUrl;
-      if (!r.completedCommandUrl && memo.completedCommandUrl) r.completedCommandUrl = memo.completedCommandUrl;
-      if (!r.dispatchBookUrl     && memo.dispatchBookUrl)     r.dispatchBookUrl     = memo.dispatchBookUrl;
-      // status จาก Memos ถ้า Requests ยังไม่มี
-      if (!r.status || r.status === 'กำลังดำเนินการ') {
-        if (memo.status) r.status = memo.status;
+  return rows
+    .filter((r) => {
+      // กรองตามปี พ.ศ. จาก id (บค001/2568) หรือ docDate (2025-xx-xx)
+      if (r.id && String(r.id).includes("/" + yearStr)) return true;
+      if (r.docDate && String(r.docDate).startsWith(String(yearAD)))
+        return true;
+      return false;
+    })
+    .map((r) => {
+      // --- เติม URL จาก Memos sheet ถ้า Requests sheet ยังไม่มี ---
+      const memo = memoIndex[String(r.id || "").trim()];
+      if (memo) {
+        if (!r.adminMemoUrl && memo.completedMemoUrl)
+          r.adminMemoUrl = memo.completedMemoUrl;
+        if (!r.completedMemoUrl && memo.completedMemoUrl)
+          r.completedMemoUrl = memo.completedMemoUrl;
+        if (!r.completedCommandUrl && memo.completedCommandUrl)
+          r.completedCommandUrl = memo.completedCommandUrl;
+        if (!r.dispatchBookUrl && memo.dispatchBookUrl)
+          r.dispatchBookUrl = memo.dispatchBookUrl;
+        // status จาก Memos ถ้า Requests ยังไม่มี
+        if (!r.status || r.status === "กำลังดำเนินการ") {
+          if (memo.status) r.status = memo.status;
+        }
       }
-    }
-    return {
-      id:                r.id             || '',
-      requesterName:     r.requesterName  || r.username || '',
-      purpose:           r.purpose        || '',
-      location:          r.location       || '',
-      docDate:           r.docDate        || '',
-      startDate:         r.startDate      || '',
-      endDate:           r.endDate        || '',
-      status:            r.status         || '',
-      commandStatus:     r.commandStatus  || '',
-      pdfUrl:            r.pdfUrl         || '',
-      completedMemoUrl:  r.completedMemoUrl  || '',
-      completedCommandUrl: r.completedCommandUrl || '',
-      adminMemoUrl:      r.adminMemoUrl   || '',
-      dispatchBookUrl:   r.dispatchBookUrl || '',
-    };
-  });
+      return {
+        id: r.id || "",
+        requesterName: r.requesterName || r.username || "",
+        purpose: r.purpose || "",
+        location: r.location || "",
+        docDate: r.docDate || "",
+        startDate: r.startDate || "",
+        endDate: r.endDate || "",
+        status: r.status || "",
+        commandStatus: r.commandStatus || "",
+        pdfUrl: r.pdfUrl || "",
+        completedMemoUrl: r.completedMemoUrl || "",
+        completedCommandUrl: r.completedCommandUrl || "",
+        adminMemoUrl: r.adminMemoUrl || "",
+        dispatchBookUrl: r.dispatchBookUrl || "",
+      };
+    });
 }
 
 /**
@@ -2586,51 +3264,118 @@ function getArchiveRequests(yearParam) {
  * รับ payload: { year, email, requests: [...] }
  */
 function sendYearlyBackupEmail(payload) {
-  const year    = payload.year    || (new Date().getFullYear() + 543);
+  const year = payload.year || new Date().getFullYear() + 543;
   const toEmail = payload.email;
   const requests = payload.requests || [];
 
-  if (!toEmail) throw new Error('ไม่ระบุ email ปลายทาง');
-  if (!requests.length) return { status: 'success', message: 'ไม่มีข้อมูลในปี ' + year };
+  if (!toEmail) throw new Error("ไม่ระบุ email ปลายทาง");
+  if (!requests.length)
+    return { status: "success", message: "ไม่มีข้อมูลในปี " + year };
 
   // --- สร้าง CSV attachment ---
-  const csvHeader = 'เลขที่,ชื่อผู้ขอ,วัตถุประสงค์,สถานที่,วันที่,สถานะ,บันทึก (URL),คำสั่ง (URL),หนังสือส่ง (URL)';
-  const csvRows = requests.map(r => [
-    r.id, r.requesterName, r.purpose, r.location, r.docDate,
-    r.status, r.completedMemoUrl || r.adminMemoUrl || r.pdfUrl,
-    r.completedCommandUrl, r.dispatchBookUrl
-  ].map(v => '"' + String(v || '').replace(/"/g, '""') + '"').join(','));
-  const csvContent = '\uFEFF' + csvHeader + '\n' + csvRows.join('\n'); // BOM สำหรับ Excel ภาษาไทย
-  const csvBlob = Utilities.newBlob(csvContent, 'text/csv', 'backup_' + year + '.csv');
+  const csvHeader =
+    "เลขที่,ชื่อผู้ขอ,วัตถุประสงค์,สถานที่,วันที่,สถานะ,บันทึก (URL),คำสั่ง (URL),หนังสือส่ง (URL)";
+  const csvRows = requests.map((r) =>
+    [
+      r.id,
+      r.requesterName,
+      r.purpose,
+      r.location,
+      r.docDate,
+      r.status,
+      r.completedMemoUrl || r.adminMemoUrl || r.pdfUrl,
+      r.completedCommandUrl,
+      r.dispatchBookUrl,
+    ]
+      .map((v) => '"' + String(v || "").replace(/"/g, '""') + '"')
+      .join(","),
+  );
+  const csvContent = "\uFEFF" + csvHeader + "\n" + csvRows.join("\n"); // BOM สำหรับ Excel ภาษาไทย
+  const csvBlob = Utilities.newBlob(
+    csvContent,
+    "text/csv",
+    "backup_" + year + ".csv",
+  );
 
   // --- สร้าง HTML email ---
-  const statsTotal    = requests.length;
-  const statsComplete = requests.filter(r => r.status && (r.status.includes('เสร็จสิ้น') || r.status.includes('รับไฟล์'))).length;
-  const statsFiles    = requests.filter(r => r.completedMemoUrl || r.adminMemoUrl || r.completedCommandUrl || r.dispatchBookUrl).length;
+  const statsTotal = requests.length;
+  const statsComplete = requests.filter(
+    (r) =>
+      r.status &&
+      (r.status.includes("เสร็จสิ้น") || r.status.includes("รับไฟล์")),
+  ).length;
+  const statsFiles = requests.filter(
+    (r) =>
+      r.completedMemoUrl ||
+      r.adminMemoUrl ||
+      r.completedCommandUrl ||
+      r.dispatchBookUrl,
+  ).length;
 
-  const tableRows = requests.map((r, i) => {
-    const fileLinks = [];
-    if (r.pdfUrl)               fileLinks.push('<a href="' + r.pdfUrl + '" style="color:#2563eb">📄 บันทึก</a>');
-    if (r.completedMemoUrl && r.completedMemoUrl !== r.pdfUrl)
-                                 fileLinks.push('<a href="' + r.completedMemoUrl + '" style="color:#2563eb">📄 บันทึก (ส่ง)</a>');
-    if (r.adminMemoUrl)          fileLinks.push('<a href="' + r.adminMemoUrl + '" style="color:#16a34a">📩 แอดมินส่งให้</a>');
-    if (r.completedCommandUrl)   fileLinks.push('<a href="' + r.completedCommandUrl + '" style="color:#7c3aed">📋 คำสั่ง</a>');
-    if (r.dispatchBookUrl)       fileLinks.push('<a href="' + r.dispatchBookUrl + '" style="color:#b45309">📦 หนังสือส่ง</a>');
+  const tableRows = requests
+    .map((r, i) => {
+      const fileLinks = [];
+      if (r.pdfUrl)
+        fileLinks.push(
+          '<a href="' + r.pdfUrl + '" style="color:#2563eb">📄 บันทึก</a>',
+        );
+      if (r.completedMemoUrl && r.completedMemoUrl !== r.pdfUrl)
+        fileLinks.push(
+          '<a href="' +
+            r.completedMemoUrl +
+            '" style="color:#2563eb">📄 บันทึก (ส่ง)</a>',
+        );
+      if (r.adminMemoUrl)
+        fileLinks.push(
+          '<a href="' +
+            r.adminMemoUrl +
+            '" style="color:#16a34a">📩 แอดมินส่งให้</a>',
+        );
+      if (r.completedCommandUrl)
+        fileLinks.push(
+          '<a href="' +
+            r.completedCommandUrl +
+            '" style="color:#7c3aed">📋 คำสั่ง</a>',
+        );
+      if (r.dispatchBookUrl)
+        fileLinks.push(
+          '<a href="' +
+            r.dispatchBookUrl +
+            '" style="color:#b45309">📦 หนังสือส่ง</a>',
+        );
 
-    const rowBg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
-    return '<tr style="background:' + rowBg + '">'
-      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap">' + escapeHtmlGAS(r.id) + '</td>'
-      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' + escapeHtmlGAS(r.requesterName) + '</td>'
-      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;max-width:220px">' + escapeHtmlGAS(r.purpose) + '</td>'
-      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap">' + escapeHtmlGAS(r.docDate) + '</td>'
-      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' + escapeHtmlGAS(r.status) + '</td>'
-      + '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;line-height:1.8">'
-      + (fileLinks.length ? fileLinks.join('<br>') : '<span style="color:#94a3b8">ไม่มีไฟล์</span>')
-      + '</td>'
-      + '</tr>';
-  }).join('');
+      const rowBg = i % 2 === 0 ? "#ffffff" : "#f8fafc";
+      return (
+        '<tr style="background:' +
+        rowBg +
+        '">' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap">' +
+        escapeHtmlGAS(r.id) +
+        "</td>" +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' +
+        escapeHtmlGAS(r.requesterName) +
+        "</td>" +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;max-width:220px">' +
+        escapeHtmlGAS(r.purpose) +
+        "</td>" +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap">' +
+        escapeHtmlGAS(r.docDate) +
+        "</td>" +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' +
+        escapeHtmlGAS(r.status) +
+        "</td>" +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;line-height:1.8">' +
+        (fileLinks.length
+          ? fileLinks.join("<br>")
+          : '<span style="color:#94a3b8">ไม่มีไฟล์</span>') +
+        "</td>" +
+        "</tr>"
+      );
+    })
+    .join("");
 
-  const archiveUrl = 'https://wnyxmanagementgroup.github.io/wnyhq2/archive/?year=' + year;
+  const archiveUrl =
+    "https://wnyxmanagementgroup.github.io/wnyhq2/archive/?year=" + year;
 
   const htmlBody = `
 <!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Sarabun,Arial,sans-serif;background:#f1f5f9;margin:0;padding:20px">
@@ -2683,23 +3428,43 @@ function sendYearlyBackupEmail(payload) {
 </body></html>`;
 
   MailApp.sendEmail({
-    to:          toEmail,
-    subject:     '[สำรองข้อมูล] รายการไปราชการประจำปี พ.ศ. ' + year + ' (' + requests.length + ' รายการ)',
-    htmlBody:    htmlBody,
+    to: toEmail,
+    subject:
+      "[สำรองข้อมูล] รายการไปราชการประจำปี พ.ศ. " +
+      year +
+      " (" +
+      requests.length +
+      " รายการ)",
+    htmlBody: htmlBody,
     attachments: [csvBlob],
-    name:        'ระบบบริหารงานบุคคล',
+    name: "ระบบบริหารงานบุคคล",
   });
 
-  Logger.log('📧 Backup email sent to: ' + toEmail + ' | year: ' + year + ' | count: ' + requests.length);
-  return { status: 'success', message: 'ส่ง Email สำรองข้อมูลปี ' + year + ' จำนวน ' + requests.length + ' รายการเรียบร้อยแล้ว' };
+  Logger.log(
+    "📧 Backup email sent to: " +
+      toEmail +
+      " | year: " +
+      year +
+      " | count: " +
+      requests.length,
+  );
+  return {
+    status: "success",
+    message:
+      "ส่ง Email สำรองข้อมูลปี " +
+      year +
+      " จำนวน " +
+      requests.length +
+      " รายการเรียบร้อยแล้ว",
+  };
 }
 
 /** escape HTML สำหรับใช้ใน email body */
 function escapeHtmlGAS(text) {
-  if (!text) return '';
+  if (!text) return "";
   return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
