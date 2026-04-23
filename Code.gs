@@ -1998,7 +1998,8 @@ function formatThaiCurrency(num) {
 
 function uploadMemo(payload) {
   // รับ fileUrl (ลิงก์ที่อัปโหลดแล้ว) เพิ่มเข้ามา
-  const { refNumber, file, username, memoType, fileUrl } = payload;
+  const { refNumber, file, username, memoType, fileUrl, isAdminBypass } =
+    payload;
 
   const memoSheet =
     SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Memos");
@@ -2035,6 +2036,9 @@ function uploadMemo(payload) {
         const match = fileUrl.match(/\/d\/(.*?)\//);
         if (match) fileId = match[1];
       } catch (e) {}
+    } else if (isAdminBypass) {
+      // กรณี Admin bypass ส่งบันทึกโดยไม่มีไฟล์แนบ
+      finalFileUrl = "";
     } else {
       throw new Error("File data is required."); // ยังคงแจ้งเตือนถ้าไม่มีอะไรส่งมาเลย
     }
