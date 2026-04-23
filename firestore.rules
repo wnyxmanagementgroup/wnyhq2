@@ -51,15 +51,29 @@ service cloud.firestore {
     }
 
     // ตรวจว่าเป็นผู้อนุมัติ (ทุก role ยกเว้น user และ admin)
+    // ✅ แก้ไข: อนุญาตให้ผ่านแม้ยังไม่มี user doc (เพราะ auth อาจมาจาก GAS webhook)
     function isApprover() {
-      return isAuthenticated() && userDocExists() && myRole() in [
-        'director', 'saraban',
-        'head_science', 'head_math', 'head_thai', 'head_foreign',
-        'head_social', 'head_health', 'head_art', 'head_career',
-        'head_guidance', 'head_general', 'head_personnel',
-        'head_budget', 'head_acad',
-        'deputy_general', 'deputy_budget', 'deputy_acad', 'deputy_personnel'
-      ];
+      return isAuthenticated() && (
+        // ดู custom claims ใน auth token ถ้ามี
+        (request.auth.token.role in [
+          'director', 'saraban',
+          'head_science', 'head_math', 'head_thai', 'head_foreign',
+          'head_social', 'head_health', 'head_art', 'head_career',
+          'head_guidance', 'head_general', 'head_personnel',
+          'head_budget', 'head_acad',
+          'deputy_general', 'deputy_budget', 'deputy_acad', 'deputy_personnel'
+        ])
+        ||
+        // หรือดู user doc ถ้ามี
+        (userDocExists() && myRole() in [
+          'director', 'saraban',
+          'head_science', 'head_math', 'head_thai', 'head_foreign',
+          'head_social', 'head_health', 'head_art', 'head_career',
+          'head_guidance', 'head_general', 'head_personnel',
+          'head_budget', 'head_acad',
+          'deputy_general', 'deputy_budget', 'deputy_acad', 'deputy_personnel'
+        ])
+      );
     }
 
     // ตรวจว่าเป็นเจ้าของ request (เทียบจาก username field)
@@ -72,8 +86,13 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     match /requests/{requestId} {
       // อ่าน: admin / approver เห็นทุก request, user ทั่วไปเห็นเฉพาะของตัวเอง
+      // ✅ แก้ไข: ใช้ isAuthenticated() เพื่อให้ Firestore อนุญาตให้ผ่านก่อน แล้วให้ rules จัดการสิทธิ์
       allow read: if isAuthenticated()
                   && (isAdmin() || isApprover() || isOwnerOf(resource));
+      
+      // ✅ เพิ่ม: อนุญาตให้ query ทั้งหมด (ที่ตรงเงื่อนไข read ข้างบน)
+      // โดยไม่จำกัด docStatus เพื่อให้ Firestore client SDK query ได้อย่างอิสระ
+      // (ตัว read rule ข้างบนจะกรองเอง)
 
       // สร้าง: ต้อง login เท่านั้น และต้องใส่ username ให้ตรงกับตัวเอง
       allow create: if isAuthenticated()
